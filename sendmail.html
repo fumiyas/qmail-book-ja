@@ -1,0 +1,2239 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01//EN"
+                      "http://www.w3.org/TR/html4/strict.dtd">
+<html lang="ja">
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<meta http-equiv="Content-Language" content="ja">
+<meta http-equiv="Content-Style-Type" content="text/css">
+<meta name="author" lang="en" content="SATOH Fumiyasu">
+<meta name="author" lang="ja" content="佐藤 文優">
+<link rel="stylesheet" href="./book.css" type="text/css">
+<title>第10章 sendmail から qmail への移行 - qmail で作る快適メールサーバー</title>
+</head>
+<body>
+<h1><a name="top">第10章 sendmail から qmail への移行 - qmail で作る快適メールサーバー</a></h1>
+<div class="sign">
+佐藤 文優 &lt;<a href="http://www.sfo.jp/blog/">http://www.sfo.jp/blog/</a>&gt;<br>
+2001年12月17日 更新, 2001年8月 以来
+</div>
+
+FIXME: /etc/mail/local-host-name
+
+<hr>
+<h2><a name="toc">目次</a></h2>
+<dl>
+<dt><a href="#difference">10.1 sendmail と qmail の違い</a></dt>
+    <dd class="none"><a href="#difference-process">10.1.1 プロセスの構成</a></dd>
+    <dd class="none"><a href="#difference-function">10.1.2 機能</a></dd>
+    <dd class="none"><a href="#difference-configuration">10.1.3 設定ファイル</a></dd>
+    <dd class="none"><a href="#difference-mailbox">10.1.4 メールボックスの形式</a></dd>
+<dt><a href="#migration">10.2 sendmail からの移行の手順</a></dt>
+<!-- COMMENT by fumiya
+    <dd class="none"><a href="#migration-config">10.2.X 設定の移行</a></dd>
+-->
+    <dd class="none"><a href="#migration-sendmail-daemon">10.2.1 sendmail デーモンの停止</a></dd>
+    <dd class="none"><a href="#migration-queue">10.2.2 未配送メールの処理 (キューの掃き出し)</a></dd>
+    <dd class="none"><a href="#migration-sendmail-package">10.2.3 sendmail の無効化</a>
+	<ul>
+	<li class="none">sendmail をアンインストールする場合</li>
+	<li class="none">sendmail をアンインストールしない場合</li>
+	<li class="none">sendmail をアンインストールしない場合の注意点</li>
+	</ul>
+    </dd>
+    <dd class="none"><a href="#migration-mailbox">10.2.4 メールボックスの移行</a>
+	<ul>
+	<li class="none">maildir 形式のメールボックスへの移行</li>
+	<li class="none">ホームディレクトリ 内の mbox 形式メールボックスへの移行</li>
+	<li class="none">maildir 形式から mbox 形式への変換</li>
+	</ul>
+    </dd>
+    <dd class="none"><a href="#migration-popimap">10.2.5 POP/IMAP サーバーの移行</a></dd>
+    <dd class="none"><a href="#migration-mailer">10.2.6 メールクライアントの設定変更</a></dd>
+    <dd class="none"><a href="#migration-alias">10.2.7 エイリアスと転送設定の移行</a>
+	<ul>
+	<li class="none">エイリアスの移行</li>
+	<li class="none">ユーザーごとの転送設定の移行</li>
+	</ul>
+    </dd>
+    <dd class="none"><a href="#migration-qmail">10.2.8 qmail デーモンの稼働</a></dd>
+<dt><a href="#compatible">10.3 sendmail 互換環境を作る</a></dt>
+    <dd class="none"><a href="#compatible-sendmail-command">10.3.1 qmail の sendmail 互換コマンドインターフェイス</a></dd>
+    <dd class="none"><a href="#compatible-fastforward">10.3.2 <code>/etc/aliases</code> によるエイリアス設定</a>
+	<ul>
+	<li class="none">fastforward のインストール</li>
+	<li class="none">fastforward の各種バイナリ/ソースパッケージ</li>
+	<li class="none">fastforward を qmail 環境へ組込む</li>
+	<li class="none">fastforward の互換性</li>
+	</ul>
+    </dd>
+    <dd class="none"><a href="#compatible-dot-forward">10.3.3 <code>~/.forward</code> によるメールの転送</a>
+	<ul>
+	<li class="none">dot-forward のインストール</li>
+	<li class="none">dot-forword の各種バイナリ/ソースパッケージ</li>
+	<li class="none">dot-forward を qmail 環境へ組込む</li>
+	<li class="none">dot-forward の互換性</li>
+	</ul>
+    </dd>
+    <dd class="none"><a href="#compatible-vsm">10.3.4 sendmail と同じメールボックスへの配送</a>
+	<ul>
+	<li class="none">sendmail のローカルメーラー</li>
+	<li class="none">sendmail のローカルメーラーを qmail 環境へ組込む</li>
+	<li class="none">procmail を qmail 環境へ組込む</li>
+	</ul>
+    </dd>
+    <dd class="none"><a href="#compatible-fix-mail">10.3.5 必要なヘッダーフィールドが付けられていないメールの矯正</a>
+	<ul>
+	<li class="none">壊れたメールが矯正されるまでの流れ</li>
+	<li class="none">壊れたメールを矯正するための設定</li>
+	<li class="none">このメール矯正方法の問題点</li>
+	</ul>
+    </dd>
+    <dd class="none"><a href="#compatible-notify-bounce">10.3.6 宛先ユーザー不明によるバウンスを管理者に通知する</a>
+	<ul>
+	<li class="none">バウンスしたメールのコピーを得る方法</li>
+	<li class="none">より適切なバウンスメール情報を通知する方法</li>
+	</ul>
+    </dd>
+<!-- COMMENT by fumiya
+    <dd class="none"><a href="#compatible-notify-deferred">10.3.X 配送遅延の通知</a></dd>
+    <dd class="none"><a href="#compatible-fixcrio">10.3.X SMTP で行末に LF しか送らないクライアント対応</a></dd>
+    <dd class="none"><a href="#compatible-uniq-mail">10.3.X 同一の宛先を複数含んだメールを 1通だけ受けとる</a></dd>
+    <dd class="none"><a href="#compatible-not">10.3.X 代表的な非互換な動作</a></dd>
+-->
+<dt><a href="#appendix">付録</a></dt>
+    <dd class="none"><a href="#appendix-reference">参考文献</a></dd>
+    <dd class="none"><a href="#appendix-changelog">更新履歴</a></dd>
+</dl>
+
+<hr>
+<h2><a name="difference">10.1 sendmail と qmail の違い</a></h2>
+<p>
+sendmail に関する詳細な情報はほかの専門書に譲りますが、
+ここでは sendmail と qmail の主な違いを挙げます。
+移行作業と移行後の運用を円滑に行うには、違いだけでなく、
+双方の本質を理解することも重要だということを付け加えておきます。
+</p>
+<p>
+<a href="../source/qmail/SENDMAIL">qmail の付属文書ファイル <code>SENDMAIL</code></a>
+には、
+一般ユーザーから見た sendmail と qmail の違いについて記述されています。
+</p>
+<h3><a name="difference-process">10.1.1 プロセスの構成</a></h3>
+<p>
+sendmail はメール配送エージェントとしてのほぼすべての機能を
+「sendmail」という名前のプロセス (コマンド) が担当しています。
+そのため sendmail プロセスは巨大かつ複雑です。
+しかも、1つで様々な権限が必要な役割りを負うため、
+sendmail デーモンプロセスは root 権限で動作し、
+しかも sendmail コマンドの実行ファイルは root 権限に setuid されています。
+配送に関する処理を細分化し、
+各処理ごとに必要最低限な実効権限のみを与えられている qmail とは大きく異なります。
+</p>
+<p>
+qmail のプロセスは、
+ある処理に特化された複数のプロセスで構成されています。
+これらはまるで、
+旧来からある UNIX の小粋で柔軟性の高いコマンド群のようです。
+実際 qmail によるメール配送処理はシェルプログラムのようであり、
+環境変数による動作の制御や情報の受け渡し、データのパイプライン、
+コマンドの終了コードによる条件分岐といった動作をします。
+</p>
+<table>
+<caption>MTA としての役割りと処理するプロセスの違い</caption>
+<tbody>
+<tr>
+    <th class="header">役割り</th>
+    <th class="header">sendmail</th>
+    <th class="header">qmail</th>
+</tr>
+<tr>
+    <th>SMTP によるメール受信</th>
+    <td rowspan="6">sendmail</td>
+    <td>qmail-smtpd</td>
+</tr>
+<tr>
+    <th>コマンドラインからのメール送信(受信)</th>
+    <td>qmail-inject</td>
+</tr>
+<tr>
+    <th>メールをキューに登録</th>
+    <td>qmail-queue</td>
+</tr>
+<tr>
+    <th>キューの掃除</th>
+    <td>qmail-clean</td>
+</tr>
+<tr>
+    <th>キューに溜っているメールの送信</th>
+    <td>qmail-send</td>
+</tr>
+<tr>
+    <th>リモートユーザーへのメール送信</th>
+    <td>qmail-rspawn + qmail-remote</td>
+</tr>
+<tr>
+    <th>ローカルユーザーへのメール送信</th>
+    <td>mail.local</td>
+    <td>qmail-lspawn + qmail-local</td>
+</tr>
+<tr>
+    <th>...</th>
+    <td>...</td>
+    <td>...</td>
+</tr>
+</tbody>
+</table>
+<p>
+qmail は一つ1つのプロセスが小さく単純です。
+しかも、ソースコードは sendmail の数分の一しかありません。
+サイトを運用・管理する上で、
+ソースコードに目を通し実装をより深く理解する必要に迫られることもあるので、
+これは大きな利点です。
+<!-- COMMENT by fumiya
+その分 qmail のコードの見通しがよいと言え、
+MTA の実装の教材に向いているでしょう。
+-->
+</p>
+
+<h3><a name="difference-function">10.1.2 機能</a></h3>
+<p>
+「機能主義」に走り、
+メールに関するあらゆる機能を取り入れている sendmail に対し、
+qmail は純粋な MTA としての機能しか有していません。
+qmail にはない sendmail の代表的な機能としては、
+To:/From: フィールドのアドレス書き換えや補完、
+複雑なメール配送の制御といったものがあります。
+qmail と同じような目的の機能でも、
+sendmail ではより柔軟な条件指定と制御が可能です。
+</p>
+<p>
+sendmail は、
+誤った動作をするクライアントに寛容という特徴もあります。
+例えば、 SMTP 通信におけるコマンドやデータの 1行は
+CR (Carriage-Return, ASCII コードで 0x0D) と
+LF (LineFeed, 0x0A) で終っていなければならないと定められていますが、 
+これに従わず行末に LF だけを送信するクライアントがあります。
+sendmail はそのような行も受け付けますが、
+qmail (qmail-smtpd) は処理を中断します。
+また、
+メールクライアントが付加すべき Date:/Message-ID:
+といったヘッダーフィールドがメールに含まれていない場合、
+sendmail は生成して付加しますが、
+qmail はそのようなことはしません。
+</p>
+<p>
+sendmail 特有の機能・振舞いに依存しているサイトから qmail へ移行するには、
+</p>
+<ol>
+    <li>同等の機能を実現する追加のソフトウェアをインストールし、利用する。</li>
+    <li>同等の機能を実現するパッチを qmail ソースに適用し、
+        そのソースから作成した qmail バイナリを利用する。
+    </li>
+    <li>別の手段で同等の目的を実現
+	(あるいは同等の問題を回避) できないか検討し、
+	それを利用する。
+    </li>
+    <li>1 + 2, 1 + 3, 2 + 3, あるいは 1 + 2 + 3</li>
+    <li>しかたないと諦める。</li>
+</ol>
+<p>
+と、少しばかり厄介です。
+どれも不可であれば、
+残念ながら qmail に移行することを諦め、
+sendmail を使い続けることになります
+ただ筆者の経験では、
+sendmail でなければならない場面に遭遇したことはありません。
+</p>
+<!-- COMMENT by fumiya
+<p>
+バージョンアップを繰り返していくなかで、
+数十から数百の拡張とバグ修正が行なわれ、
+それと同時に新たなバグが作り込まれているのが現状です。
+</p>
+-->
+
+<h3><a name="difference-configuration">10.1.3 設定ファイル</a></h3>
+<p>
+sendmail の設定は、
+その難解さで有名な「sendmail.cf」という名前のファイルに記述します。
+ご覧になったことがない方は、
+sendmail がインスールされたシステムの
+<code>/etc/sendmail.cf</code> (あるいは <code>/etc/mail/sendmail.cf</code>)
+に目を通してみてください。
+おおよそ、
+人が読んで理解することを前提としていないことがわかるでしょう。
+通常、sendmail.cf ファイルを直接編集することはせず、
+sendmail 付属のツール cf や、
+WIDE Project の中村素典氏により作成された CF
+(現在は開発停止) などを利用して、
+より簡単なメタファイルから sendmail.cf を生成します。
+</p>
+<p>
+cf や CF のメタファイルと比較しても、
+qmail の設定ファイルは単純明解です。
+設定項目ごとに設定ファイルが分離しており、
+そのほとんどはたった 1行記述するだけで機能します。
+qmail 付属のマニュアル
+<a href="../resource/man/qmail-control.5.txt">qmail-control(5)</a> を読めば、
+どの設定ファイルがどの処理 (プロセス) に影響するか一目瞭然です。
+</p>
+<p>
+時々「qmail は設定ファイルがたくさんあってわかりにくい」
+といった声が聞かれますが、
+sendmail.cf を理解するのと比較するとどうでしょうか。
+</p>
+
+<h3><a name="difference-mailbox">10.1.4 メールボックスの形式</a></h3>
+<p>
+sendmail 標準のメールボックスは、
+誰でも読み書きできる共有ディレクトリ
+(ただし <code>/tmp</code> のように他人のファイルは削除できない)
+内の「mbox 形式」と呼ばれるファイルです。
+mbox 形式のメールボックスファイルはユーザーごとに 1ファイルあり、
+ファイル名はユーザーのログイン名となっています。
+共有ディレクトリは、
+一般的には <code>/var/mail</code> あるいは <code>/var/spool/mail</code> です。
+</p>
+<p>
+mbox 形式のメールボックスは、
+1つのファイルに複数のメールを保持するのも特徴です。
+各メールは次のような行で始まり、最後に空白行が付きます。
+</p>
+<blockquote>
+<div>From <var>送信者アドレス</var> <var>タイムスタンプ</var></div>
+</blockquote>
+<p>
+sendmail 標準のメールボックスには、
+次ような非常に悩ましい問題があります。
+</p>
+<dl>
+<dt>変種がいくつも存在する</dt>
+    <dd>
+    qmail 付属のマニュアル
+    <a href="../resource/man/mbox.5.txt">mbox(5)</a> で触れられているように、
+    少なくとも mboxrd, mboxo, mboxcl, mboxcl2 の 4種類のフォーマットが存在する。
+    </dd>
+<dt>ロックの方法が規定されていない</dt>
+    <dd>
+    flock(2 or 3),  lockf(3) によるロック, ロックファイルの作成のいずれか、
+    もしくはそれらの組み合わせで行なわれる。
+    </dd>
+<dt>NFS による共有は危険</dt>
+    <dd>
+    旧来の NFS は flock(2 or 3), lockf(3) によるロックに対応していない。
+    ロックに対応している NFS の実装でも、安定していないと専らの評判である。
+    </dd>
+<dt>共有ディレクトリは危険</dt>
+    <dd>
+    誰でも書き込めるディレクトリは、
+    しばしば DoS 攻撃 (Denial of Service, サービスを使用不能に陥れる攻撃)
+    の標的にされる。
+    </dd>
+<!-- COMMENT by fumiya
+しかし、実際のそのような攻撃を受けたという話は聞いたことがない。
+DoS の可能性があるだけで気持ち悪いが。
+-->
+</dl>
+<p>
+通常 qmail では、
+各ユーザーのホームディレクトリにメールボックスを保持します。
+上記のように扱い難い mbox 形式にも対応していますが、
+より安全で信頼性の高い maildir 形式が利用できます。
+maildir 形式は qmail 付属のマニュアル
+<a href="../resource/man/maildir.5.txt">maildir(5)</a> で解説されています。
+<!-- FIXME: ほかの章で解説されているなら、そちらに振る -->
+</p>
+
+<hr>
+<h2><a name="migration">10.2 sendmail からの移行の手順</a></h2>
+<p>
+この節では、
+sendmail の停止から qmail に移行するまでの手順について解説します。
+<a href="../source/qmail/REMOVE.sendmail">qmail 付属文書ファイル <code>REMOVE.sendmail</code></a>
+にも同様の解説がありますので、そちらも参考にするとよいでしょう。
+</p>
+<p>
+より安全・確実に移行を実施したい場合は、
+システムをシングルユーザーモードにして作業することをお勧めします。
+シングルユーザーモードであれば、
+メールサービスを利用する可能性のあるほかのサービス (POP3 サーバー、cron など) は
+稼働しておらず、また、一般ユーザーはログインしていない状態になります。
+</p>
+<p>
+もしくは、移行用に別のマシンを用意するとよいでしょう。
+そちらに qmail を導入し、メールサービスを段階的に移行しましょう。
+(ただしこの方法は本書では解説しません)
+<!-- FIXME: 改訂版対応 -->
+</p>
+<!-- COMMENT by fumiya
+改訂版対応
+<h3><a name="migration-config">10.2.X 設定の移行</a></h3>
+-->
+<h3><a name="migration-sendmail-daemon">10.2.1 sendmail デーモンの停止</a></h3>
+<p>
+sendmail をインストールし利用しているなら、
+システムのブート時に sendmail デーモンが起動し、
+常駐するように設定されていることでしょう。
+sendmail デーモンは、
+SMTP 接続の待ち受けと定期的なキューの処理を行っています。
+まずは sendmail デーモンのプロセスを停止し、
+SMTP 経由でメール着信しないようにします
+(キューの扱いについては次節)。
+</p>
+<p>
+sendmail デーモンプロセスを停止するには、
+root で次のようにします。
+ここで使用している ps コマンドは、
+種類によってオプションや表示が異なることがあるのでご注意ください。
+</p>
+<div>
+sendmail デーモンのプロセス ID の調査と停止 (BSD 系 ps):
+<pre class="terminal"><code># <kbd>ps ax | grep sendmail</kbd>
+<em>   291 ?        S  3:18 /usr/sbin/sendmail -bd -q15m</em>
+ 26556 pts/12   S  0:00 grep sendmail
+# <kbd>kill 291</kbd>
+</code></pre>
+</div>
+<div>
+sendmail デーモンのプロセス ID の調査と停止 (System V 系 ps):
+<pre class="terminal"><code># <kbd>ps -ef | grep sendmail</kbd>
+<em>    root   291     1  0   Apr 25 ?        3:18 /usr/sbin/sendmail -bd -q15m</em>
+  fumiya 28199 28112  0 02:29:35 pts/12   0:00 grep sendmail
+# <kbd>kill 291</kbd>
+</code></pre>
+</div>
+<!-- COMMENT by fumiya
+この実行例は、Solaris 8 の /bin/ps と /usr/ucb/ps での結果
+-->
+<p>
+System V 系の起動スクリプトを採用しているシステムでは、
+<code>/etc/init.d</code>
+(古い Red Hat Linux などでは <code>/etc/rc.d/init.d</code>)
+にある制御スクリプトを利用してもよいでしょう。
+</p>
+<div>
+sendmail サービスの停止 (init スクリプト):
+<pre class="terminal"><code># <kbd>/etc/init.d/sendmail stop</kbd>
+</code></pre>
+</div>
+
+<h3><a name="migration-queue">10.2.2 未配送メールの処理 (キューの掃き出し)</a></h3>
+<p>
+sendmail を無効にする前に、
+sendmail のメールキューに滞留しているメールを配送させることを忘れないように注意してください。
+qmail は sendmail のキューに関知しないため、
+これを怠ると、sendmail のキューのメールは紛失したのと同然です。
+</p>
+<p>
+sendmail キューの処理は <code>sendmail -q</code> コマンドで実行し、
+キューの状態は mailq コマンドで確認します。
+</p>
+<div>
+キューの掃き出しと確認:
+<pre class="terminal"><code># <kbd>sendmail -q</kbd>
+# <kbd>mailq</kbd>
+/var/spool/mqueue is empty
+</code></pre>
+</div>
+
+<h3><a name="migration-sendmail-package">10.2.3 sendmail の無効化</a></h3>
+<h4>sendmail をアンインストールする場合</h4>
+<p>
+なんらかのパッケージ管理システムにより sendmail がインストールされているなら、
+それに従い適切な方法でアンインストールしてください。
+</p>
+<p>
+しかし、
+sendmail のようにシステムの標準的なサービスを提供するパッケージは、
+ほかのパッケージに依存されいることでしょう。
+パッケージ管理システムは、
+sendmail がほかのパッケージに必要とされるため、
+通常の方法では sendmail をアンインストールすることを拒否します。
+</p>
+<p>
+次の例は、
+logcheck パッケージが「smtpdaemon」に依存しているため、
+それを提供している sendmail パッケージの削除が中断されています。
+</p>
+<div>
+パッケージの依存関係によりアンインストールできない例 (RPM):
+<pre class="terminal"><code># <kbd>rpm -e sendmail</kbd>
+error: removing these packages would break dependencies:
+        smtpdaemon is needed by logcheck-1.1.1-2
+</code></pre>
+</div>
+<p>
+qmail で sendmail の代替ができるのであれば、
+依存関係を無視するオプションを指定して sendmail パッケージを強制的に削除しても問題ありません。
+しかし、以下のような場合には注意が必要です。
+</p>
+<dl>
+<dt>sendmail 特有の仕様に依存しているパッケージがある場合</dt>
+    <dd>
+    sendmail コマンドの特殊なオプションを利用するもの。
+    qmail には sendmail コマンド互換のインターフェイス
+    (<a href="#compatible-sendmail-command">10.3.1 節</a>を参照のこと)
+    が用意されているが、
+    100% 互換性があるわけではない。
+    </dd>
+    <dd>
+    一昔前は sendmail が事実上標準の MTA であったため、
+    同じ時代に生れ育ってきたメールクライアントのいくつかは、
+    sendmail の持つインターフェイスや振舞いを前提として作成される。
+    例えば、メールの形式や送信方法といった仕様は、
+    本来なら RFC
+    (<a href="../resource/rfc/rfc2821.txt">RFC 2821</a>
+    「Simple Mail Transfer Protocol」,
+    <a href="../resource/rfc/rfc2822.txt">RFC 2822</a>
+    「Internet Message Format」) に準拠すべきだが、
+    「sendmail で問題ないからよし」と手を抜いて誤った動作をする実装がある。
+    </dd>
+<dt>qmail をパッケージ管理システム下に置かない場合</dt>
+    <dd>
+    パッケージ管理システムは qmail の存在を知らないため、
+    システムには MTA がインストールされていないと判断する。
+    MTA を要求するパッケージを操作するたびに文句を言われることになるだろう。
+    </dd>
+    <dd>
+    面倒でも、お使いのパッケージ管理システムに合った qmail 
+    パッケージを作成したほうがよい。
+    </dd>
+</dl>
+<h4>sendmail をアンインストールしない場合</h4>
+<p>
+アンインストールしない場合は、
+sendmail を介してのメールの送受信がされないようにします。
+sendmail は以下のように利用されます。
+</p>
+<ol>
+    <li>sendmail デーモンが提供する SMTP サーバーによる受信</li>
+    <li>sendmail コマンドによるメール送信</li>
+    <li>sendmail デーモンもしくは定期的な sendmail コマンド起動によるキューの処理</li>
+</ol>
+<h5>sendmail デーモンの無効化</h5>
+<p>
+ブート時のデーモンの起動設定はシステムの種類により異なり、
+ブートスクリプト <code>/etc/rc</code> 中
+(BSD 系、あるいは <code>/etc/rc.local</code> など) か、
+<code>/etc/rc<var>?</var>.d</code>
+(あるいは <code>/etc/rc.d/rc<var>?</var>.d</code>) ディレクトリ中の
+sendmail スクリプト (System V 系) によって実現されています。
+</p>
+<p>
+<code>/etc/rc</code> スクリプトの場合は、
+スクリプト中の sendmail デーモンを起動する箇所をコメントアウトします。
+例えば、FreeBSD 4.3 の <code>/etc/rc</code> スクリプト内には、
+次のような箇所があります。
+この部分の各行の行頭に、シェルスクリプトのコメントを表す
+「<code>#</code>」を付けます。
+</p>
+<div>
+sendmail デーモンの起動箇所 (FreeBSD 4.3 の <code>/etc/rc</code>):
+<pre class="code"><code>case ${sendmail_enable} in
+[Yy][Ee][Ss])
+    if [ -r /etc/mail/sendmail.cf ]; then
+        echo -n ' sendmail'; /usr/sbin/sendmail ${sendmail_flags}
+    fi
+    ;;
+esac
+</code></pre>
+</div>
+<div>
+sendmail デーモン起動の無効化 (FreeBSD 4.3 の <code>/etc/rc</code>):
+<pre class="code"><code>#case ${sendmail_enable} in
+#[Yy][Ee][Ss])
+#    if [ -r /etc/mail/sendmail.cf ]; then
+#        echo -n ' sendmail'; /usr/sbin/sendmail ${sendmail_flags}
+#    fi
+#    ;;
+#esac
+</code></pre>
+</div>
+<p>
+FreeBSD 4.0 以降の場合、
+sendmail デーモンの起動を
+<code>/etc/rc.conf</code> ファイルの記述で制御することができます
+(詳しくはマニュアル rc.conf(5) を参照のこと)。
+このように、標準的な方法はシステムにより異なることがありますのでご注意ください
+(後述の System V の場合も同様)。
+</p>
+<p>
+System V 系では、
+sendmail デーモンの起動スクリプトが
+<code>/etc/rc<var>?</var>.d/S<var>NN</var>sendmail</code>
+(あるいは <code>/etc/init.d/rc<var>?</var>.d/S<var>NN</var>sendmail</code>,
+<var>?</var> は英数字, <var>NN</var> は 2桁の数字)
+に置かれています。
+それらは <code>/etc/init.d/sendmail</code>
+(<code>/etc/rc.d/init.d/sendmail</code>)
+とのハードリンクもしくはシンボリックリンクなっています。
+これを削除ないしは移動することで無効化します。
+</p>
+<div>
+sendmail デーモンの無効化 (System V 系, <code>_S<var>NN</var>sendmail</code> に移動する場合):
+<pre class="terminal"><code># <kbd>cd /etc</kbd>
+# <kbd>for r in rc?.d; do (cd $r &amp;&amp; eval 's=`ls S??sendmail`' &amp;&amp; mv $s _$s); done</kbd>
+</code></pre>
+</div>
+<p>
+Red Hat Linux あるいはその派生システムでは、
+「<code>chkconfig --del sendmail</code>」で
+システムブート時の sendmail デーモンの起動を無効にすることができます。
+</p>
+<h5>定期的な sendmail コマンド起動の無効化</h5>
+<p>
+SMTP サービスを提供しないシステムでは sendmail デーモンは稼働せず、
+送信キューに滞留しているメールを処理するため、
+定期的に sendmail コマンドを起動するように設定されています。
+定期的な処理は cron デーモンを利用します。
+</p>
+<p>
+root の cron テーブル (<code>crontab -e</code> で編集)、
+あるいは
+<code>/etc/cron.d</code> か <code>/etc/cron.hourly</code>
+ディレクトリ内のスクリプトで
+「<code>sendmail -q</code>」を実行している箇所がないか調べ、
+無効にしてください。
+</p>
+<h5>sendmail コマンドの無効化</h5>
+<p>
+Windows で動作するメールクライアントは、
+メールの送信に SMTP サーバーを利用するのが一般的です。
+一方、UNIX で動作するメールクライアントは、
+メール送信用のコマンドを利用するものがあります。 
+代表的なメール送信用コマンドとしては
+mail コマンドや mailx コマンドが一般的ですが、
+sendmail コマンドもその中の一つです。
+</p>
+<p>
+mail, mailx コマンドはメールクライアントの一種で、
+その内部では sendmail コマンドを利用してメールの送信を行います。
+このため sendmail コマンドが利用できないと
+sendmail コマンドを利用しているメールクライアントはもちろん、
+mail, mailx コマンドによるメール送信もできなくなってしまいます。
+この問題は
+「<a href="#compatible-sendmail-command">10.3.1 qmail の sendmail 互換コマンドインターフェイス</a>」
+の節で紹介する qmail 付属の sendmail コマンドを利用して回避します。
+</p>
+<p>
+sendmail コマンドは、
+<code>/usr/sbin/sendmail</code>
+<code>/usr/bin/sendmail</code>,
+<code>/usr/lib/sendmail</code> といった場所にあるので、
+これを実行できないようにしましょう。
+いずれかがシンボリックリンクになっていることがありますのでご注意ください。
+</p>
+<div>
+sendmail コマンドの無効化:
+<pre class="terminal"><code># <kbd>cd /usr/sbin</kbd>
+# <kbd>ls -l sendmail</kbd>
+-r-sr-xr-x  1 root  other  316348 Aug 19  2000 sendmail
+# <kbd>mv sendmail sendmail.dist</kbd>
+# <kbd>chmod 0 sendmail.dist</kbd>
+# <kbd>ls -l sendmail.dist</kbd>
+----------  1 root  other  316348 Aug 19  2000 sendmail.dist
+</code></pre>
+</div>
+<p>
+sendmail コマンドは元に戻せるように削除はせず、
+移動だけします。
+また、移動した sendmail コマンドが誤って実行されないように、
+アクセス許可をすべて落すことをお勧めします。
+sendmail コマンドは root に setuid されて実行されるため、
+ローカルユーザーによって sendmail のセキュリティホールを突かれる恐れがあります。
+</p>
+<p>
+以上の sendmail コマンド無効化の手順は、
+FreeBSD 4.0 以降には適用できません。
+FreeBSD 4.0 以降の <code>/usr/sbin/sendmail</code> コマンドはラッパーで、
+mailer.conf(5) により実際に起動されるコマンドを切り換えるようになっています。
+</p>
+<h4>sendmail をアンインストールしない場合の注意点</h4>
+<p>
+sendmail パッケージをアンインストールせずに qmail を導入した場合は、
+システムのアップグレードやパッチを適用する際に注意が必要です。
+例えば、「<a href="#compatible">10.3 sendmail 互換環境を作る</a>」
+で紹介している qmail 付属の sendmail コマンドや
+fastforward 付属の newalias コマンドを sendmail のものと置き換えていると、
+アップグレードやパッチを適用した際に、
+新しい sendmail パッケージのコマンドに上書きされてしまう恐れがあります。
+無効にした sendmail デーモンの起動が復活して、
+qmail-smtpd と衝突することも考えられます。
+</p>
+
+
+<h3><a name="migration-mailbox">10.2.4 メールボックスの移行</a></h3>
+<p>
+qmail の標準では、
+各ユーザーのホームディレクトリ内 に、
+mbox 形式か maildir 形式のメールボックスにメールを配送します。
+sendmail 時代のメールボックスは、
+誰でも読み書きできる共有ディレクトリ内に
+mbox 形式で保持されていますので、
+これを qmail が扱うメールボックスに移行しなければなりません。
+</p>
+<p>
+qmail (qmail-local) がメールボックスへのメール配送に
+procmail や mail.local コマンドなど使用するように設定され、
+sendmail と同じパス/同じ形式のファイルのメールボックスに配送するのであれば、
+この作業は必要ありません。
+(<a href="#compatible-vsm">10.3.4 節</a>)
+</p>
+<h4>maildir 形式のメールボックスへの移行</h4>
+<p>
+sendmail の mbox 形式のメールボックスから
+qmail 標準の maildir 形式のメールボックスに変換するには、
+mbox2maildir コマンドを利用します。
+mbox2maildir は qmail には付属していないため、別途入手してください。
+いくつかの変種がありますが、代表的なものは以下から入手できます。
+このコマンドは Perl スクリプトですので、
+別途 Perl が必要です。
+</p>
+<dl>
+<dt>mbox2maildir コマンドの所在</dt>
+    <dd><a href="http://www9.jp.qmail.org/mbox2maildir">http://www9.jp.qmail.org/mbox2maildir</a> (ミラー)</dd>
+    <dd><a href="http://www.qmail.org/mbox2maildir">http://www.qmail.org/mbox2maildir</a></dd>
+</dl>
+<p>
+このコマンドは変換元と変換先のメールボックスを環境変数で指定します。
+以下に実行例を示します。
+sendmail 標準の mbox 形式のメールボックスファイルは、
+共有メールスプールディレクトリ
+<code>/var/mail</code> (もしくは <code>/var/spool/mail</code>)
+以下にあります。
+ファイル名はユーザーのログイン名です。
+</p>
+<div>
+mbox2maildir によるメールボックス形式の変換:
+<pre class="terminal"><code>$ <kbd>MAIL=/var/mail/fumiya</kbd>
+$ <kbd>MAILDIR=$HOME/Maildir</kbd>
+$ <kbd>export MAIL MAILDIR</kbd>
+$ <kbd>mbox2maildir</kbd>
+</code></pre>
+</div>
+<p>
+この mbox2maildir コマンドには次のような問題があり、
+あまり柔軟性はありません。
+そのままでは特定の場面でしか利用できません。
+qmail への移行の段階で、メールサービスを停止して変換作業を行うのであれば、
+2. は問題とはなりません。
+</p>
+<ol>
+    <li>mbox 形式の変種に対応していない</li>
+    <li>mbox 形式のメールボックスのアクセス時にロック処理をしない</li>
+    <li>変換元の mbox 形式のメールボックスを削除してしまう</li>
+</ol>
+<p>
+mbox2maildir コマンドと同じような目的のコマンドは多数存在します。
+mbox2maildir に満足できないのであれば、
+別途、目的に合ったコマンドを探してみてください。
+それでも満足できるものがなければ、それらを参考にして、
+ご自分の mbox2maildir コマンドを作成しましょう。
+</p>
+<p>
+Google (<a href="http://www.google.com/">http://www.google.com/</a>)
+でキーワード「mbox2maildir」で検索してみたところ、
+次のような変換ツールを見つけることができました。
+しかし、
+mbox 形式の変種に対応しているものは見つけることができませんでした。
+</p>
+<dl>
+<dt>そのほかの変換ツールの所在</dt>
+    <dd><a href="http://www.nm.net/pub/qmail/yammc.pl">http://www.nm.net/pub/qmail/yammc.pl</a></dd>
+    <dd><a href="http://www.myrddin.demon.co.uk/scripts.html">http://www.myrddin.demon.co.uk/scripts.html</a></dd>
+    <dd><a href="http://archives.neohapsis.com/archives/postfix/1999-q4/1477.html">http://archives.neohapsis.com/archives/postfix/1999-q4/1477.html</a></dd>
+</dl>
+<h4>ホームディレクトリ 内の mbox 形式メールボックスへの移行</h4>
+<p>
+qmail (qmail-local) は、
+mbox 形式のメールボックスへの配送に対応していますが、
+sendmail のような共有メールスプールディレクトリではなく、
+各ユーザーのホームディレクトリ内に保持します。
+</p>
+<p>
+sendmail 時代に利用していた IMAP/POP サーバーやメールクライアントに対応するため、
+共有メールスプールから各ユーザーのメールボックスへシンボリックリンクを作成するとよいでしょう。
+もちろん、
+各 IMAP/POP サーバーとメールクライアントのほうで対応することもできますが、
+シンボリックリンクにより旧来と同じパスでメールボックスを参照できるようにするほうが手間がかかりません。
+</p>
+<p>
+次に作業の例を示します。
+この例では共有メールスプールは <code>/var/mail</code> になっていますが、
+システムにより適宜読み換えてください (<code>/var/spool/mail</code> など)。
+この作業は、既存のユーザーのメールボックスのことだけを考慮しています。
+新規にユーザーを追加した場合、同様の作業を行うのを忘れないようにしてください。
+<!-- COMMENT by fumiya
+ここでは共有メールスプールディレクトリのアクセス許可を変更し、
+root 以外は書き込めないようにしています。
+…と一旦は書いたが、INSTALL.mbox にも書かかれているように、/var/mail は
+モード 1777 でなければならない。なぜなら、メールクライアントは POP3 サーバーなどが
+メールを読む際、このディレクトリを利用しようとするからである。
+-->
+</p>
+<div>
+ホームディレクトリのメールボックスを sendmail 時代のパスで参照できるようにする:
+<pre class="terminal"><code># <kbd>cd /home</kbd>
+# <kbd>for n in *; [ -d $n ] &amp;&amp; ln -s /home/$n/Mailbox /var/mail/$n; done</kbd>
+</code></pre>
+</div>
+<h4>maildir 形式から mbox 形式への変換</h4>
+<p>
+主なメールクライアントは、正式あるいはパッチによって maildir 対応がなされています。
+しかしいくつかのメールクライアント、特にユーザーが少ないものや古いもの、 
+そして開発が停止しているものは、maildir に対応していません。
+そんな時に助けになるのが qmail 付属の maildir2mbox コマンドです。
+</p>
+<p>
+maildir 形式に対応していないメールクライアントを利用しているユーザーは、
+maildir2mbox を利用して、
+定期的に maildir から mbox への変換するようにします。
+</p>
+<p>
+maildir2mbox は、次の環境変数を介してメールボックスの位置を知ります。 
+いずれも絶対パスを指定しなければなりません。
+</p>
+<dl>
+    <dt><code>MAILDIR</code></dt>
+	<dd>変換元の maildir 形式のメールボックスディレクトリのパス名</dd>
+    <dt><code>MAIL</code></dt>
+	<dd>変換先の mbox 形式のメールボックスファイルのパス名</dd>
+    <dt><code>MAILTMP</code></dt>
+	<dd>変換処理中に使用する mbox 形式メールボックスファイルのパス名</dd>
+	<dd>
+	<code>MAIL</code>
+	に指定したパスと同じファイルシステム内のパスでなければならない
+	(変換処理終了後に <code>MAIL</code> で指定された名前にリネームするため)
+	</dd>
+</dl>
+<p>
+例として、
+ユーザーが簡単にメールボックスの変換を行えるスクリプト
+maildir2mbox.sh を用意しました。
+mbox 形式のメールボックスが必要なユーザーは、
+適宜このスクリプトを起動するか、
+ユーザー自身の crontab(5) に記述して定期的に実行するように設定するとよいでしょう。
+</p>
+<div>
+maildir2mbox を利用したメールボックス変換スクリプトの例 (maildir2mbox.sh):
+<pre class="code"><code>#!/bin/sh
+
+if [ -z &quot;$HOME&quot; ]; then
+    echo &quot;HOME not set&quot;
+    exit 1
+fi
+
+MAILDIR=$HOME/Maildir
+MAIL=$HOME/Mailbox
+MAILTMP=$HOME/.maildir2mbox.$$.tmp
+export MAILDIR MAIL MAILTMP
+
+/var/qmail/bin/maildir2mbox
+</code></pre>
+</div>
+<div>
+メールボックス変換スクリプトをユーザー自身の cron テーブルに登録:
+<pre class="code"><code>0 * * * * /usr/local/bin/maildir2mbox.sh
+</code></pre>
+</div>
+
+<h3><a name="migration-popimap">10.2.5 POP/IMAP サーバーの移行</a></h3>
+<p>
+POP サーバーや IMAP サーバーを利用しているなら、
+ホームディレクトリのメールボックスを参照するように設定変更してください。
+mbox 形式であってもホームディレクトリ内のメールボックスに対応していなかったり、
+maildir 形式に対応していない POP/IMAP サーバーもあります。
+コンパイル時オプションやソースにパッチに適用するなどして再コンパイル、
+インストールするか、別のソフトウェアに乗り換えてください。
+</p>
+<p>
+qmail (qmail-local) がメールボックスへのメール配送に
+procmail や mail.local コマンドなど使用するように設定され、
+sendmail と同じパス/同じ形式のファイルのメールボックスに配送するのであれば、
+この作業は必要ありません。
+(<a href="#compatible-vsm">10.3.4 節</a>)
+</p>
+
+<h3><a name="migration-mailer">10.2.6 メールクライアントの設定変更</a></h3>
+<p>
+IMAP や POP サーバーを利用せずに直接メールボックスを参照するメールクライアントは、
+設定を変更して maildir 形式のメールボックスを参照するようにします。
+方法はメールクライアントによって異なりますので、
+詳細はお使いのメールクライアントのマニュアルなどを参照してください。
+</p>
+<p>
+mbox 形式のメールボックスに配送しているのであれば、環境変数 <code>MAIL</code>
+を変更してホームディレクトリ内のメールボックスを指すようにしましょう。
+<code>MAIL</code>環境変数は mbox 形式のメールボックスを指示するもので、
+<code>/bin/mail</code> などのいくつかの UNIX のメールクライアントが参照します。
+これに従わないメールクライアントもありますのでご注意ください。
+</p>
+<div>
+メールボックスの場所の指定 - Bourne shell 系の場合
+(<code>/etc/profile</code> に追加):
+<pre class="code"><code>MAIL=$HOME/Mailbox
+export MAIL
+</code></pre>
+</div>
+<div>
+メールボックスの場所の指定 - C shell 系の場合
+(<code>/etc/csh.cshrc</code> に追加):
+<pre class="code"><code>setenv MAIL $HOME/Mailbox
+</code></pre>
+</div>
+<p>
+maildir に対応していないメールクライアントの救済については、
+<a href="#migration-mailbox">10.2.4 節</a> の「maildir 形式から mbox 形式への変換」の節を参照してください。
+</p>
+
+<h3><a name="migration-alias">10.2.7 エイリアスと転送設定の移行</a></h3>
+<h4>エイリアスの移行</h4>
+<p>
+sendmail の
+<code>/etc/aliases</code> ファイル
+(あるいは <code>/etc/mail/aliases</code>)
+のエイリアスの設定を、
+qmail の
+<code>users/assign</code> と
+エイリアス用ユーザー alias の .qmail ファイルに移行します。
+<!--
+qmail のエイリアス定義の方法は、
+FIXME:<a href="FIXME">X.X.X 節</a>を参照してください。
+-->
+</p>
+<p>
+qmail はユーザー root 宛のメールの配送は行ないません。
+<code>~alias/.qmail-root</code> ファイルを用意して、
+ユーザー alias で受け取るか別のアドレスに転送するようにしてください。
+これを怠ると、root 宛のメールが紛失してしまいますのでご注意ください。
+</p>
+<p>
+sendmail のエイリアスには、
+伝統的に「nobody」というテスト用の名前が定義されています。
+この定義により nobody 宛のメールを受信しますが、
+そのまま <code>/dev/null</code> に捨てるようになっています。
+これを qmail で実現するには、.qmail ファイルにコメントだけを記述します。
+</p>
+<div>
+エイリアス nobody の定義:
+<pre class="terminal"><code># <kbd>cd /var/qmail/alias</kbd>
+# <kbd>echo '#' &gt; .qmail-nobody</kbd>
+# <kbd>chmod 644 .qmail-nobody</kbd>
+</code></pre>
+</div>
+<p>
+qmail で sendmail の
+<code>/etc/aliases</code> ファイルを利用する方法については、
+「<a href="#compatible-fastforward">10.3.2 <code>/etc/aliases</code> によるエイリアス設定</a>」を参照のこと。
+</p>
+<h4>ユーザーごとの転送設定の移行</h4>
+<p>
+sendmail のユーザーごとの転送設定である <code>~/.forward</code> ファイルを
+qmail の <code>~/.qmail</code> に移行します。
+移行の際には次の表を参考にしてください。
+表中の preline, forward は qmail 付属のコマンドです。
+.qmail については qmail 付属のマニュアル
+<a href="../resource/man/dot-qmail.5.txt">dot-qmail(5)</a> に記述されています。
+「<a href="./dot-qmail.html">第7章 .qmail ファイルの利用</a>」も参照のこと。
+</p>
+<table>
+<caption>.forward と .qmail の転送先指定の記述の違い</caption>
+<tbody>
+<tr>
+    <th class="header">転送先の種類</th>
+    <th class="header">sendmail + .forward</th>
+    <th class="header">qmail (qmail-local) + .qmail</th>
+</tr>
+<tr>
+    <th>コメント</th>
+    <td><code>#<var> comment</var></code></td>
+    <td><code>#<var> comment</var></code></td>
+</tr>
+<tr>
+    <th>アドレスへ転送</th>
+    <td><code><var>username</var>@<var>example.com</var></code></td>
+    <td><code>&amp;<var>username</var>@<var>example.com</var></code></td>
+</tr>
+<tr>
+    <th>ローカルユーザーへ転送</th>
+    <td><code><var>username</var></code></td>
+    <td>未対応<br>
+	代替案: <code>|forward &quot;<var>username</var>@$HOST&quot;</code><br>
+	代替案: <code>&amp;<var>username</var></code> (<code>control/envnoathost</code> に依存)
+    </td>
+</tr>
+<tr>
+    <th>ローカルコピー</th>
+    <td>自分のユーザー名を記述</td>
+    <td>自分のメールボックスのパスを記述<br>
+	例: <code>./Maildir/</code>
+    </td>
+</tr>
+<tr>
+    <th>mbox 形式メールボックスへ出力</th>
+    <td><code><var>/path/to/outputfile</var></code></td>
+    <td><code><var>/path/to/outputfile</var></code></td>
+</tr>
+<tr>
+    <th>.forward 用コマンドの利用</th>
+    <td><code>&quot;|<var>/path/to/command</var> <var>args</var>&quot;</code></td>
+    <td><code>|preline <var>/path/to/command</var> <var>args</var></code></td>
+</tr>
+<tr>
+    <th>転送先リストの取り込み</th>
+    <td><code>:include:<var>/path/to/listfile</var></code></td>
+    <td>未対応<br>
+	代替案: <code>|forward `cat <var>/path/to/listfile</var>`</code>
+    </td>
+</tr>
+<tr>
+    <th>複数の転送先</th>
+    <td>それぞれ別の行に記述<br>1行にカンマ区切りで列挙可</td>
+    <td>それぞれ別の行に記述</td>
+</tr>
+</tbody>
+</table>
+<!-- COMMENT by fumiya
+変換の例をいくつか挙げてもいいかもしれない。
+-->
+<p>
+qmail で sendmail の <code>~/.forward</code> ファイルを利用する方法については、
+「<a href="#compatible-dot-forward">10.3.3 <code>~/.forward</code> によるメールの転送</a>」
+を参照のこと。
+</p>
+
+<h3><a name="migration-qmail">10.2.8 qmail デーモンの稼働</a></h3>
+<p>
+ここまで来れば、快適な qmail の世界まであと少しです。
+最後に qmail のデーモンを稼働させ動作を確認したら、
+いよいよサービススタートしましょう。
+</p>
+<p>
+おめでとうございます。
+ようこそ、qmail の世界へ!
+</p>
+<!-- COMMENT by fumiya
+ボツ原稿
+<p>
+しかし、最後の扉を明ける前に「動作確認」という重要な作業が残っています。
+</p>
+<ol>
+    <li>qmail-smtpd (SMTP), qmail-inject によりメールの送信ができること</li>
+    <li>SMTP により外部からのメール受信できること</li>
+    <li>エイリアス/ユーザーへの配送が正常動作すること</li>
+    <li>メールクライアントで受信したメールが読めること</li>
+    <li>SMTP サービスへのアクセスやメール中継の制限が正しいこと</li>
+    <li>送信されるメールの送信者アドレス、
+	From: フィールドのアドレス (ドメイン部) が正しいこと
+    </li>
+    <li>そのほか…</li>
+</ol>
+-->
+
+<hr>
+<h2><a name="compatible">10.3 sendmail 互換環境を作る</a></h2>
+<p>
+この節では、
+追加のソフトウェアをインストールしたり qmail の設定に手を加えることで、
+sendmail と同じような機能・振舞いを実現する方法を紹介します。
+次のような場合に有用です。
+</p>
+<ul>
+    <li>段階的に qmail に移行したい</li>
+    <li>sendmail の遺産を qmail 環境でも利用したい</li>
+    <li>sendmail と同等の機能 (あるいは振舞い) を qmail で利用したい</li>
+</ul>
+<p>
+sendmail 互換とすることにより、
+qmail の長所が生かされないことがあります。
+また、互換環境を実現するための仕掛けがトリッキーなものがあり、
+環境が複雑になってしまいます。
+原理はもちろん、利点・欠点をよく理解の上、導入するようにしてください。
+</p>
+<h3><a name="compatible-sendmail-command">10.3.1 qmail の sendmail 互換コマンドインターフェイス</a></h3>
+<p>
+<a href="#migration-sendmail-package">10.2.3 節</a> の
+「sendmail コマンドの無効化」で触れたように、
+メールの送信を sendmail コマンドで実行するメールクライアントが存在します。
+CGI や何らかの通知システムなどが
+直接 sendmail コマンドを利用してメールを送信することもあります。
+qmail ではこれに対応するため、
+その名もずばり「sendmail」という名前の sendmail 互換のコマンドが付属しています。
+</p>
+<p>
+qmail の sendmail 互換コマンドは、
+通常のインストール形態では
+<code>/var/qmail/bin/sendmail</code> に置かれています。
+これを本物の sendmail が置かれていたパスから参照できるように、
+シンボリックリンクを作成しましょう。
+sendmail コマンドは
+<code>/usr/sbin/sendmail</code>,
+<code>/usr/bin/sendmail</code>,
+<code>/usr/lib/sendmail</code> といった場所にあるので、
+そこから <code>/var/qmail/bin/sendmail</code>
+へのシンボリックリンクを作成します。
+</p>
+<div>
+qmail の sendmail 互換コマンドを一般的なパスで参照できるようにする:
+<pre class="terminal"><code># <kbd>ln -s /var/qmail/bin/sendmail /usr/sbin/sendmail</kbd>
+</code></pre>
+</div>
+<!-- COMMENT by fumiya
+互換性の話が必要?
+-->
+
+<h3><a name="compatible-fastforward">10.3.2 <code>/etc/aliases</code> によるエイリアス設定</a></h3>
+<p>
+sendmail では、エイリアスアドレスの設定を
+<code>/etc/aliases</code> ファイルで指定します。
+qmail には、sendmail の aliases ファイルを利用するための
+fastforward というソフトウェアがあります。
+fastforward は、qmail と同じく D. J. Bernstein 氏による作品です。
+</p>
+<dl>
+<dt>fastforward の Web サイト</dt>
+    <dd><a href="http://cr.yp.to/fastforward.html">http://cr.yp.to/fastforward.html</a></dd>
+    <dd><a href="http://www.jp.qmail.org/tools/fastforward.html">http://www.jp.qmail.org/tools/fastforward.html</a> (ミラー)</dd>
+</dl>
+<h4>fastforward のインストール</h4>
+<p>
+fastforward のコンパイルとインストールの手順は qmail とほぼ同様です。
+実行バイナリとマニュアルも qmail と同じく
+<code>/var/qmail</code> 以下にインストールされます。
+</p>
+<dl>
+<dt>fastforward のソースの所在</dt>
+    <dd><a href="http://cr.yp.to/software/fastforward-0.51.tar.gz">http://cr.yp.to/software/fastforward-0.51.tar.gz</a></dd>
+    <!--なくなった<dd><a href="http://www.jp.qmail.org/tools/software/fastforward-0.51.tar.gz">http://www.jp.qmail.org/tools/software/fastforward-0.51.tar.gz</a> (ミラー)</dd>-->
+    <dd><a href="ftp://ftp.jp.qmail.org/qmail/fastforward-0.51.tar.gz">ftp://ftp.jp.qmail.org/qmail/fastforward-0.51.tar.gz</a> (ミラー)</dd>
+</dl>
+<div>
+fastforward のコンパイルとインストール:
+<pre class="terminal"><code>$ <kbd>gzip -dc fastforward-0.51.tar.gz | tar xf -</kbd>
+$ <kbd>cd fastforward-0.51</kbd>
+$ <kbd>make it install instcheck 2&gt;&amp;1| tee make.out</kbd>
+<var>… バイナリなどのコンパイル状況 …</var>
+$ <kbd>su</kbd>
+Password: <kbd><var>root のパスワード</var></kbd>
+# <kbd>make setup</kbd>
+./install
+# <kbd>make check</kbd>
+./instcheck
+</code></pre>
+</div>
+<p>
+fastforward には「newaliases」という名前のコマンドが付属しています。
+このコマンドは sendmail の newaliases コマンドと同じ目的のもので、
+実行すると、
+テキスト形式の aliases ファイルからバイナリのエイリアスデータベースファイルを生成します (双方のデータベースに互換性はありません)。
+必要であれば、
+qmail の newaliases コマンドを sendmail のものと同じパスで参照できるようにしてください。
+</p>
+<p>
+qmail の newaliases コマンドは
+<code>/etc/aliases</code> ファイルを参照しますが、
+最近の sendmail のエイリアスファイルは
+<code>/etc/mail/aliases</code> にあります。
+これも調整しておくと便利です。
+最初から <code>/etc/aliases</code> から
+<code>/etc/mail/aliases</code>
+にシンボリックリンクが張られているシステムもあります。
+</p>
+<div>
+newaliases コマンドと aliases ファイルのパスの調整:
+<pre class="terminal"><code># <kbd>ln -s /var/qmail/bin/newaliases /usr/sbin/newaliases</kbd>
+# <kbd>ln -s /etc/mail/aliases /etc/aliases</kbd>
+</code></pre>
+</div>
+<h4>fastforward の各種バイナリ/ソースパッケージ</h4>
+<dl>
+<dt>バイナリ/ソース RPM パッケージ (Red Hat Linux など)</dt>
+    <dd><a href="http://www.webideal.de/qmail/">http://www.webideal.de/qmail/ (SRPM)</a></dd>
+    <dd><a href="http://untroubled.org/rpms/fastforward/">http://untroubled.org/rpms/fastforward/</a> (SRPM, 少し古い)</dd>
+    <dd><a href="http://www.rpmfind.net/linux/rpm2html/search.php?query=fastforward">http://www.rpmfind.net/linux/rpm2html/search.php?query=fastforward</a> (Mandrake Linux 向け)</dd>
+<dt>Debian GNU/Linux</dt>
+    <dd>「fastforward-src」というパッケージをインストールし、
+    <code>build-fastforward</code>
+    コマンドを実行してバイナリパッケージを作成する</dd>
+<dt>FreeBSD など</dt>
+    <dd>FreeBSD の「qmail-contrib」という port に含まれている</dd>
+</dl>
+<h4>fastforward を qmail 環境へ組込む</h4>
+<p>
+まず始めに、
+<code>/etc/aliases</code> ファイルからエイリアスのデータベースファイル
+<code>/etc/aliases.cdb</code> を作成しておきます。
+この作業は aliases ファイルを更新する度に実行する必要があります。
+</p>
+<div>
+エイリアスデータベースの更新:
+<pre class="terminal"><code># <kbd>/var/qmail/bin/newaliases</kbd>
+</code></pre>
+</div>
+<p>
+fastforward は、
+qmail のエイリアス処理用のユーザー alias の .qmail-default ファイルに組込みます。
+</p>
+<p>
+「<a href="./dot-qmail.html#extension">7.2 拡張メールアドレス</a>」で解説しているように、
+.qmail による拡張アドレス定義 .qmail-default ファイルは特別で、
+ほかの拡張アドレスに一致しない場合には
+.qmail-default ファイルの設定に従いメール配送されます。
+これと同様に、
+ユーザー alias の .qmail-default ファイルもワイルドカードアドレスとして働きます。
+つまり、既存のユーザーとエイリアスのどれにも一致していない場合にデフォルトの配送指定として <code>~alias/.qmail-default</code> が評価されます。
+</p>
+<p>
+というわけで、<code>~alias/.qmail-default</code> に
+fastforward コマンドを起動する記述をします。
+fastforward のコマンドライン引数には、
+エイリアスデータベースファイルのパスを指定します。
+</p>
+<div>
+fastforward の qmail への組込み:
+<pre class="terminal"><code># <kbd>cd /var/qmail/alias</kbd>
+# <kbd>echo '|fastforward /etc/aliases.cdb' &gt; .qmail-default</kbd>
+# <kbd>chmod 644 .qmail-default</kbd>
+</code></pre>
+</div>
+<h4>fastforward の互換性</h4>
+<p>
+qmail + fastforward によるエイリアスの動作は、
+sendmail の動作とはいくつか異なります。
+</p>
+<h5>ファイルへの出力には対応していない</h5>
+<p>
+エイリアスアドレス宛に届いたメールをファイルに出力させることはできません。
+ユーザー alias の .qmail ファイルを利用してください。
+</p>
+<h5>:include: 構文でインクルードされるファイルの扱い</h5>
+<p>
+:include: 構文でインクルードされる外部のアドレスリストファイルは、
+直接参照されません。
+事前に newinclude コマンドを使用して、
+バイナリファイルを生成しておかねばなりません。
+詳細は <a href="../resource/man/newinclude.1.txt">newinclude(1)</a>
+を参照のこと。
+</p>
+<!-- COMMENT by fumiya
+newinclude(1) にこの件の解説あり。リストファイルが書き換えられている
+タイミングで fastforward が参照すると、不完全な内容を参照してしまう
+ためである。リストファイルのロック方法は (メーリング)リスト管理ソフトウェア
+に依存するため、fastforward では対応できない。
+tcprules のように、一時ファイルに出力し、それが完成したら実際の出力先の
+ファイルにリネームするようになっていれば安全である。しかし、このような
+考慮をするプログラマは少ないらしく、DJB 氏の作品以外ではほとんど (まったく?)
+目にしたことがない。
+-->
+<h5>/etc/aliases は一番最後に評価される</h5>
+<p>
+qmail は、
+自ホスト宛のメールの配送先を以下のような順番で評価し、決定します。
+いずれかの段階で宛先アドレスに対応する配送先が見つかれば、
+それ移行の評価は行いません。
+</p>
+<ol>
+    <li><code>users/assign</code> による宛先アドレスとユーザーの対応表</li>
+    <li>宛先アドレスのローカル部と一致している UNIX ユーザー</li>
+    <li><code>~alias/.qmail-<var>aliasname</var></code> によるエイリアス設定</li>
+</ol>
+<p>
+この中でもエイリアスのワイルドカードである
+<code>~alias/.qmail-default</code> ファイルは、
+一番最後に評価されます。
+このため、
+fastforward による <code>/etc/aliases</code> ファイルのエイリアス指定は、
+ローカルユーザーへのメール配送を制御 (上書き) することはできません。
+</p>
+<p>
+sendmail は、
+<code>/etc/aliases</code> の指定をローカルユーザーより先に評価します。
+</p>
+<h3><a name="compatible-dot-forward">10.3.3 ~/.forward によるメールの転送</a></h3>
+<p>
+sendmail では、ユーザーごとのメールの転送設定を .forward ファイルで指定します。
+qmail には .forward ファイルを利用するための
+dot-forward というソフトウェアがあります。
+dot-forward は、qmail と同じく D. J. Bernstein 氏による作品です。
+</p>
+<dl>
+<dt>dot-forward の Web サイト</dt>
+    <dd><a href="http://cr.yp.to/dot-forward.html">http://cr.yp.to/dot-forward.html</a></dd>
+</dl>
+<h4>dot-forward のインストール</h4>
+<p>
+dot-forward のコンパイルとインストールの手順は qmail とほぼ同様です。
+実行バイナリとマニュアルも qmail と同じく
+<code>/var/qmail</code> 以下にインストールされます。
+</p>
+<dl>
+<dt>dot-forward のソースの所在</dt>
+    <dd><a href="http://cr.yp.to/software/dot-forward-0.71.tar.gz">http://cr.yp.to/software/dot-forward-0.71.tar.gz</a></dd>
+    <dd><a href="ftp://ftp.jp.qmail.org/qmail/dot-forward-0.71.tar.gz">ftp://ftp.jp.qmail.org/qmail/dot-forward-0.71.tar.gz</a> (ミラー)</dd>
+</dl>
+<div>
+dot-forward のコンパイルとインストール:
+<pre class="terminal"><code>$ <kbd>gzip -dc dot-forward-0.71.tar.gz | tar xf -</kbd>
+$ <kbd>cd dot-forward-0.71</kbd>
+$ <kbd>make it install instcheck 2&gt;&amp;1| tee make.out</kbd>
+<var>… バイナリなどのコンパイル状況 …</var>
+$ <kbd>su</kbd>
+Password: <kbd><var>root のパスワード</var></kbd>
+# <kbd>make setup</kbd>
+./install
+# <kbd>make check</kbd>
+./instcheck
+</code></pre>
+</div>
+<h4>dot-forword の各種バイナリ/ソースパッケージ</h4>
+<dl>
+<dt>バイナリ/ソース RPM パッケージ (Red Hat Linux など)</dt>
+    <dd><a href="http://untroubled.org/rpms/dot-forward/">http://untroubled.org/rpms/dot-forward/</a> (少し古い)</dd>
+    <dd><a href="http://www.rpmfind.net/linux/rpm2html/search.php?query=dot-forward">http://www.rpmfind.net/linux/rpm2html/search.php?query=dot-forward</a> (Mandrake Linux 向け)</dd>
+<dt>Debian GNU/Linux</dt>
+    <dd>「dot-forward-src」というパッケージをインストールし、
+    <code>build-fastforward</code>
+    コマンドを実行してバイナリパッケージを作成する</dd>
+<dt>FreeBSD など</dt>
+    <dd>FreeBSD の「qmail-contrib」という port に含まれている</dd>
+</dl>
+<h4>dot-forward を qmail 環境へ組込む</h4>
+<p>
+dot-forward は、
+qmail のメール配送エージェントのスタートアップコマンド
+qmail-start に「デフォルトの配送方法の指定」引数として指定します。
+この引数は qmail-lspawn を介して qmail-local に渡され、
+宛先メールアドレスのローカル部に対応する .qmail ファイルがない場合のデフォルトの配送方法となります。
+</p>
+<p>
+qmail-start のコマンドラインは
+qmail によるメール配送のスタートアップスクリプト
+<code>/var/qmail/rc</code> に記述されているので、
+このスクリプトを書き換えます
+(独自のスタートアップスクリプトを使用しているなら、
+もちろんそちらを書き換える必要があります)。
+スタートアップスクリプトを <code>/var/qmail/boot/home</code>
+からコピーして用意した場合、その中身は次のようになっています
+(コメントは省略)。
+</p>
+<div>
+デフォルトで ~/Mailbox へ配送するためのスタートアップスクリプト
+(<code>/var/qmail/rc</code>):
+<pre class="code"><code>#!/bin/sh
+exec env - PATH=&quot;/var/qmail/bin:$PATH&quot; \
+qmail-start ./Mailbox splogger qmail
+</code></pre>
+</div>
+<p>
+この状態では qmail-start の第1引数(デフォルトの配送方法の指定)に
+「<code>./Mailbox</code>」が指定されており、
+デフォルトではホームディレクトリの mbox 形式のメールボックスに配送されることがわかります。
+これに dot-forward を組み込むと、次のようになります
+(実は <code>/var/qmail/boot/home+df</code> と同一)。
+</p>
+<div>
+dot-forward を組み込んだスタートアップスクリプト
+(<code>/var/qmail/rc</code>):
+<pre class="code"><code>#!/bin/sh
+exec env - PATH=&quot;/var/qmail/bin:$PATH&quot; \
+qmail-start '|dot-forward .forward
+./Mailbox' splogger qmail
+</code></pre>
+</div>
+<p>
+少しわかりにくいですが、qmail-start の第1引数は
+「<code>|dot-forward .forward</code>」 + 改行 + 「<code>./Mailbox</code>」
+となります
+(シングルクォート「'」で括られている部分)。
+これを見てわかるように、
+qmail-start (qmail-local) のデフォルトの配送方法指定の形式は、
+.qmail ファイルに記述する形式とまったく同じです。
+(→「<a href="./dot-qmail.html">第7章 .qmail ファイルの利用</a>」)
+</p>
+<p>
+dot-forward は標準入力からメールを受け取り、
+コマンドライン引数で指定されたファイル (この例では <code>.forward</code>)
+に従いメールを転送し、配送の成功を示す終了コード 99 を返します。
+<code>.forward</code> ファイルが存在しない場合はなにも実行しませんが、
+続く配送指定の実行を促すために終了コード 0 を返します。
+また、
+転送先に自分自身のユーザー名かメールアドレスが指定されていた場合も終了コード 0 を返します。
+このため、前者の場合は転送処理だけ実行されますが、
+後者の場合は qmail-local により「./Mailbox」への配送も実行されます。
+.qmail から起動するコマンドの終了コードの意味と
+qmail-local の動作についてはマニュアル
+<a href="../resource/man/qmail-command.8.txt">qmail-command(8)</a>
+に解説されていますので、そちらをご覧ください。
+(→「<a href="./dot-qmail.html#command">7.3 コマンドによるメールの処理</a>」)
+</p>
+<!-- COMMENT by fumiya
+以下の節は途中まで書いたがボツ。ほかで使える?
+<p>
+qmail は自ホスト宛のメールをメールボックスに配送するときに
+qmail-local を使用します。
+qmail-local は .qmail ファイルに指定された配送方法に従って、
+</p>
+<ul>
+    <li>maildir 形式のメールボックスに配送</li>
+    <li>mbox 形式のメールボックスに配送</li>
+    <li>コマンドを起動して標準入力にメールを渡す</li>
+    <li>別のアドレスに転送</li>
+</ul>
+<p>
+のいずれかの方法で処理しますが、
+宛先メールアドレスのローカル部に対応する .qmail ファイルがない場合は、
+qmail のメール配送エージェントのスタートアップコマンド
+qmail-start を介して指定される「デフォルトの配送方法の指定」に従います。
+</p>
+-->
+<h4>dot-forward の互換性</h4>
+<p>
+qmail + dot-forward による転送の動作は、
+sendmail の動作とはいくつか異なります。
+以下に代表的な違いを紹介しますが、
+詳細はマニュアル
+<a href="../resource/man/dot-forward.1.txt">dot-forward(1)</a>
+を参照してください。
+</p>
+<h5>ファイルへの出力には対応していない</h5>
+<p>
+メールをファイルに出力させることはできません。
+.qmail ファイルを利用してください。
+</p>
+<h5>ユーザー名の先頭に付けたバックスラッシュは無効</h5>
+<p>
+sendmail では、
+.forward ファイルで指定された転送先のユーザー名は、
+エイリアスの設定 (<code>/etc/aliases</code>) で評価されます。
+また、転送先のユーザーが <code>.forward</code> ファイルを持っているなら、
+その指定に従って転送します。
+この動作は、
+ユーザー名の頭にバックスラッシュ「\」を付けることで抑制することができます。
+</p>
+<p>
+qmail (dot-forward) では、バックスラッシュはなにも意味を持ちません。
+バックスラッシュが付いていても、付いていないのと同じように評価され、
+動作にはなんら影響しません。
+</p>
+<p>
+転送先のユーザー名が自分自身の場合は、
+エイリアスも(当然)転送の設定も無視され、
+ローカルのメールボックスに配送されます。
+転送先がほかのユーザー名あるいはメールアドレスの場合、
+qmail-inject と同じ規則でアットマークやドメイン名が付加され、
+送信キューに登録されます。
+</p>
+<!-- COMMENT by fumiya
+qmail-queue でキューに登録するので、その後のメールの処理は通常と変りない。
+つまり、qmail-queue → qmail-send → qmail-local or qmail-remote ... となる。
+よって、転送先が自ホスト宛であっても、<code>users/assign</code>、
+ユーザーの .qmail ファイル、
+<code>~alias/.qmail-aliasname</code> の順に評価される。
+-->
+<h5>転送先の種類の解釈の違い</h5>
+<p>
+sendmail は転送先の種類を以下のように判別します。
+</p>
+<dl>
+<dt>縦線「|」で始まっている</dt>
+    <dd>コマンド</dd>
+    <dd>「|」を除いたものをコマンドとして起動し、メールを標準入力に渡す</dd>
+<dt>スラッシュ「/」で始まっている</dt>
+    <dd>パス名</dd>
+    <dd>メールをこのパスのファイルへ出力する (mbox 形式)</dd>
+<dt>元の宛先アドレスのローカル部と同一</dt>
+    <dd>コピーの指示</dd>
+    <dd>デフォルトのメールボックスへ配送する</dd>
+<dt>そのほか</dt>
+    <dd>メールアドレス</dd>
+    <dd>このメールアドレスへ転送する</dd>
+</dl>
+<p>
+一方、qmail (dot-forward) では、以下の順番で判別を試みます。
+</p>
+<dl>
+<dt>元の宛先アドレスのローカル部と同一</dt>
+<dt>元の宛先アドレスと同一</dt>
+    <dd>コピーの指示</dd>
+    <dd>デフォルトのメールボックスへ配送する</dd>
+<dt>クォートされていないアットマーク「@」が含まれる</dt>
+    <dd>メールアドレス</dd>
+    <dd>このメールアドレスへ転送する</dd>
+<dt>縦線「|」で始まっている</dt>
+    <dd>コマンド</dd>
+    <dd>「|」を除いたものをコマンドとして起動し、メールを標準入力に渡す</dd>
+<dt>そのほか</dt>
+    <dd>メールアドレス</dd>
+    <dd>このメールアドレスへ転送する</dd>
+</dl>
+
+<!--
+<div class="notes">
+<hr>
+<dl>
+<dt></dt>
+    <dd></dd>
+</dl>
+<hr>
+</div>
+-->
+
+<h3><a name="compatible-vsm">10.3.4 sendmail と同じメールボックスへの配送</a></h3>
+<p>
+qmail の安全性の高いホームディレクトリへの配送を捨てて、
+sendmail と同じ共有スプールディレクトリへの配送を実現する方法を紹介します。 
+maildir 形式と比較すると、信頼性も失われることを認識しておいてください。
+<a href="../source/qmail/INSTALL.vsm">qmail の付属文書ファイル <code>INSTALL.vsm</code></a>
+にも同様の解説があります。
+</p>
+<h4>sendmail のローカルメーラー</h4>
+<p>
+sendmail は自ホスト宛のメールをメールボックスに配送するときに、
+「ローカルメーラー」あるいは「MDA (Mail Delivery Agent)」
+と呼ばれる外部コマンドに依頼します。
+sendmail とローカルメーラーは sendmail.cf で指定された手順で通信します。
+ローカルメーラーとの通信の手順を制御する細かいオプションが多数用意されていますが、
+おおまかに分類すると代表的な通信手順は以下の 2種類に分けられます。
+</p>
+<ol>
+    <li>コマンドライン引数で宛先のユーザーを指示し、標準入力にメールを渡す</li>
+    <li>標準入出力を介して SMTP のような手順
+    (LMTP, <a href="../resource/rfc/rfc2033.txt">RFC 2033</a>
+    「Local Mail Transfer Protocol」)
+    で宛先のユーザーとメールを渡す</li>
+</ol>
+<p>
+この中で、1. のような通信をサポートするローカルメーラーであれば、
+qmail (qmail-local) から利用することできます。
+</p>
+<!-- COMMENT by fumiya
+ローカルメーラーは MDA (Message Delivery Agent) とも呼ばれる。
+改訂版で載せる?
+-->
+<h4>sendmail のローカルメーラーを qmail 環境へ組込む</h4>
+<p>
+qmail は自ホスト宛のメールの配送に qmail-local を使用します。
+qmail-local は、
+qmail-start を介して指定されたデフォルトの配送方法に従って配送しますので、
+qmail-start を起動するスタートアップスクリプトを変更し、
+qmail-local が sendmail のローカルメーラーを使用して配送するようにします。
+手順は <a href="#compatible-dot-forward">10.3.3 節</a>
+の dot-forward の組み込むと同様ですので、
+合わせてそちらも参照しておくと理解できるでしょう。
+</p>
+<p>
+sendmail のローカルメーラーは、
+標準では <code>/usr/libexec/mail.local</code>, <code>/bin/mail</code>
+といったものが利用されます。
+これらはコマンド名が同じでも置かれているパスや仕様がシステムによって異なるため、
+ここで全てを紹介することはできません。
+そこで本書では、Solaris 8 における例を紹介します。
+そのほかのシステムをお使いの場合は、
+qmail 付属の <code>/var/qmail/boot</code> にあるスタートアップスクリプトを参考にしてください。
+</p>
+<table>
+<caption>sendmail ローカルメーラーを利用するためのサンプルスタートアップスクリプト (<code>/var/qmail/boot</code>)</caption>
+<tbody>
+<tr>
+    <th>スクリプト名</th>
+    <th>対応するシステム</th>
+</tr>
+<tr>
+    <td><code>binm1</code></td>
+    <td>BSD 系 (/usr/libexec/mail.local -r)</td>
+</tr>
+<tr>
+    <td><code>binm1+df</code></td>
+    <td>同上 + dot-forward</td>
+</tr>
+<tr>
+    <td><code>binm2</code></td>
+    <td>System V Release 4 (SVR4) 系 (/bin/mail -r)</td>
+</tr>
+<tr>
+    <td><code>binm2+df</code></td>
+    <td>同上 + dot-forward</td>
+</tr>
+<tr>
+    <td><code>binm3</code></td>
+    <td>UNIX V7 (/bin/mail -f)</td>
+</tr>
+<tr>
+    <td><code>binm3+df</code></td>
+    <td>同上 + dot-forward</td>
+</tr>
+<tr>
+    <td><code>proc</code></td>
+    <td>procmail (後述)</td>
+</tr>
+<tr>
+    <td><code>proc+df</code></td>
+    <td>同上 + dot-forward</td>
+</tr>
+<!--
+<tr>
+    <td><code>home</code></td>
+    <td>~/Maildir への配送</td>
+</tr>
+<tr>
+    <td><code>home+df</code></td>
+    <td>同上 + dot-forward</td>
+</tr>
+-->
+</tbody>
+</table>
+<p>
+Solaris 8 付属の sendmail は、
+標準では <code>/usr/lib/mail.local -l</code>
+をローカルメーラーとして使用しています。 
+<code>-l</code> オプションはマニュアル mail.local(1M) には記載されていませんが、LMTP (Local Message Transfer Protocol, <a href="../resource/rfc/rfc2033.txt">RFC 2033</a>) で sendmail と通信するための指定です。
+qmail-local は LMTP による通信には対応していないので、
+<code>-l</code> オプションは指定しません。
+そして、送信者のアドレスと宛先のユーザーはコマンドライン引数で指定します。
+</p>
+<div>
+mail.local を組み込んだスタートアップスクリプト
+(<code>/var/qmail/rc</code>, Solaris 8):
+<pre class="code"><code>#!/bin/sh
+exec env - PATH=&quot;/var/qmail/bin:$PATH&quot; \
+qmail-start \
+'|preline -f /usr/lib/mail.local -f &quot;${SENDER:-MAILER-DAEMON}&quot; &quot;$USER&quot;' \
+splogger qmail
+</code></pre>
+</div>
+<p>
+qmail 付属の preline コマンドは、
+メールに先頭の「From 送信者アドレス タイムスタンプ」行、
+Return-Path: フィールド、Delivered-To: フィールドを付加し、
+指定されたコマンドに渡すラッパーコマンドです。
+マニュアル
+<a href="../resource/man/qmail-command.8.txt">qmail-command(8)</a>
+で解説されているように、
+qmail ではそれらの情報を環境変数によりコマンドに渡すようになっていますが、
+sendmail 向けに作成されたコマンドは理解できません。
+メール先頭の「From 」行の付加は mail.local が行うので、
+ここでは preline に -f オプションを指定して「From 」行の付加を抑制しています。
+(→「<a href="./dot-qmail.html#command-qmail">7.3.2 qmail 付属の .qmail 用コマンド</a>」の「.forward 用コマンドの利用 - preline」)
+</p>
+<p>
+環境変数 <code>SENDER</code> は送信者のメールアドレス、
+<code>USER</code> はメールボックスの所有者のユーザー名です。
+詳細は
+「<a href="./dot-qmail.html#command-interface">7.3.1 どのようにしてコマンドが起動されるのか</a>」か、
+マニュアル
+<a href="../resource/man/qmail-command.8.txt">qmail-command(8)</a>
+をご覧ください。
+</p>
+<h4>procmail を qmail 環境へ組込む</h4>
+<p>
+メールのフィルタリングや振り分けなどに利用されるソフトウェア、
+procmail を組み込む例を紹介します。
+procmail は sendmail のローカルメーラーとして利用されることもあり、
+デフォルトの配送先は sendmail と同じ共有スプールディレクトリ内の
+mbox 形式のメールボックスです。
+</p>
+<p>
+厳密なパッケージ管理システムの下では
+qmail パッケージと sendmail パッケージが共存できず、
+qmail から sendmail パッケージに含まれるローカルメーラーを利用できないことが考えられます。
+そんな場合には、
+sendmail とは独立している procmail を利用するとよいでしょう。
+</p>
+<dl>
+<dt>procmail の Web サイト</dt>
+    <dd><a href="http://www.procmail.org/">http://www.procmail.org/</a></dd>
+</dl>
+<dl>
+<dt>procmail のソースの所在</dt>
+    <dd><a href="ftp://ftp.procmail.net/pub/procmail/">ftp://ftp.procmail.net/pub/procmail/</a></dd>
+    <dd><a href="ftp://ftp.ring.gr.jp/pub/net/mail/procmail/">ftp://ftp.ring.gr.jp/pub/net/mail/procmail/</a> (ミラー)</dd>
+</dl>
+<p>
+以下に procmail のインストール例を示します。
+付属の <code>Makefile</code> では <code>/usr</code> にインストールされますが、
+この例では <code>/usr/local</code> にインストールされるよう変更しています。
+また、コンパイル中にロックのテストのための追加ディレクトリの入力を求められますが、
+通常は必要ありませんのでリターン (Enter キー) だけ入力してください。
+カスタマイズしてコンパイルするには、
+make する前に <code>Makefile</code> と
+<code>config.h</code> ファイルを編集してください。
+詳細は付属の <code>INSTALL</code> ファイルを参照のこと。
+</p>
+<div>
+procmail のコンパイルとインストール:
+<pre class="terminal"><code>$ <kbd>gzip -dc procmail-3.22.tar.gz | tar xf -</kbd>
+$ <kbd>cd procmail-3.22</kbd>
+$ <kbd>cp -p Makefile Makefile.dist</kbd>
+$ <kbd>sed 's!^BASENAME.*=.*$!BASENAME=/usr/local!' &lt; Makefil.dist &gt; Makefile</kbd>
+$ <kbd>make 2&gt;&amp;1| tee make.out</kbd>
+<var>… コンパイル前の準備 …</var>
+I will temporarily use a testdirectory named _locktest
+in the following directories:
+
+/tmp .
+
+If you would like to add any, please specify them below,
+press return to continue:
+
+<kbd>リターンのみ入力</kbd>
+<var>… ロックのテスト、バイナリなどのコンパイル状況 …</var>
+$ <kbd>su</kbd>
+Password: <kbd><var>root のパスワード</var></kbd>
+# <kbd>make install-suid</kbd>
+<var>… バイナリのインストール状況 …</var>
+# <kbd>make install.man</kbd>
+<var>… マニュアルのインストール状況 …</var>
+</code></pre>
+</div>
+<p>
+このインストールの例では procmail は
+<code>/usr/local/bin/procmail</code> に置かれるので、
+スタートアップスクリプトは次のようになります。
+</p>
+<div>
+procmail を組み込んだスタートアップスクリプト
+(<code>/var/qmail/rc</code>):
+<pre class="code"><code>#!/bin/sh
+exec env - PATH=&quot;/var/qmail/bin:/usr/local/bin:$PATH&quot; \
+qmail-start '|preline procmail' splogger qmail
+</code></pre>
+</div>
+<!-- COMMENT by fumiya
+sendmail 用ローカルメーラーとの互換性の問題
+
+sendmail 対応のローカルメーラーあるいは .forward から起動されるコマンドは、
+コマンドの終了コードとしてヘッダーファイル sysexits.h で定義されている
+エラーコードを返す。
+
+一方、qmail のローカルメーラー(?)あるいは .qmail から起動されるコマンドは、
+<a href="../resource/man/qmail-command.8.txt">qmail-command(8)</a>
+で記述されている終了コードを返すように作成されている。
+
+この違いのため、正確な動作を望むなら、相互のエラーコードのマッピングが
+必要である。EX_OK (通常 0) であれば 0 (delivery was successful)、
+EX_TEMPFAIL (多くのシステムでは 75) であれば 111 (temporary error)、
+それ以外であれば 100 (permanent error) にマップするとよいだろう。
+
+sysexits.h には、qmail で特別な意味のあるエラーコード 99,  100, 111 
+が割り当てられていることはほとんどない (システム依存)。
+しかも qmail-local は、未知のエラーコードをすべて permanent error と
+して扱うので、EX_TEMPFAIL の扱いを無視すれば、マッピングする必要はない
+(EX_TEMPFAIL も permanent error 扱いとなる)。
+-->
+
+<h3><a name="compatible-fix-mail">10.3.5 必要なヘッダーフィールドが付けられていないメールの矯正</a></h3>
+<p>
+<a href="../resource/rfc/rfc2822.txt">RFC 2822</a>
+「Internet Message Format」によると、
+インターネットメールには From:/Date: フィールドが必須と定義されています。
+また同文書には、メールを一意に識別するための
+Message-ID: フィールドも「付けるべき」と定義しています。
+よって、
+これらのヘッダーフィールドは、
+メールの生成と送信を行うメールクライアントが付加すべきものですが、
+メールクライアントの中にはこれに従わないものが存在します。
+</p>
+<!-- COMMENT by fumiya
+http://www.emaillab.org/essay/message-id.html#qmail
+-->
+<p>
+sendmail は必須とされるヘッダーフィールドが含まれていないメールを受信すると、
+自前で生成しメールに付加してから配送します。
+しかし、純粋にメールの配送処理しか行わない qmail は、
+経路情報を示すフィールド (Received:/Delivered-To: フィールド)
+を追加する以外、メールを書き換えることはありません。
+このため、sendmail から qmail に以降すると、
+メールクライアントの不具合が健在化します。
+</p>
+<h4>壊れたメールが矯正されるまでの流れ</h4>
+<p>
+qmail の FAQ に、この問題に対処するための方法が紹介されています。
+</p>
+<dl>
+<dt>How do I fix up messages from dumb clients?</dt>
+    <dd><a href="http://cr.yp.to/qmail/faq/servers.html#network-rewriting">http://cr.yp.to/qmail/faq/servers.html#network-rewriting</a></dd>
+    <dd><a href="http://www.jp.qmail.org/qmail/faq/servers.html#network-rewriting">http://www.jp.qmail.org/qmail/faq/servers.html#network-rewriting</a> (日本語訳)</dd>
+</dl>
+<p>
+ここで紹介されている設定を施すと、
+SMTP (qmail-smtpd) 経由で受信したメールが、
+次の図のような流れで配送・加工が行なわれます。
+</p>
+<pre>
+図: 必要なヘッダーフィールドがないメールの矯正 (FAQ に紹介されている手法)
+
+    問題のあるメールクライアント (1)
+        宛先アドレス bob@example.com
+        Date:/Message-ID: フィールドなし
+        |
+        v
+    tcpserver (RELAYCLIENT=&quot;@fixme&quot;)
+    qmail-smtpd (2)
+        宛先アドレス bob@example.com@fixme
+        Date:/Message-ID: フィールドなし
+        |
+        v
+    qmail-send (3)
+        |
+        v
+    ~alias/.qmail-fixup-default (4)
+    qmail-inject
+        宛先アドレス bob@example.com
+        Date: ...
+        Message-ID: ...
+        | (5)
+        v
+    qmail-send
+        |
+        v
+    ......
+</pre>
+<p>
+(1)メールクライアントからメールを送信します。
+(2)qmail-smtpd は特定のクライアントからメールを受信したときに、
+宛先アドレスを書き換えて「<var>実際の宛先アドレス</var>@fixme」宛に送付します。
+(3)「fixme」ドメイン宛のメールは自ホストの仮想ドメインで受け取るように設定されているため、
+qmail-send は virtualdomains の設定に従って
+ローカルの「fixup-<var>実際の宛先アドレス</var>@fixme」に配送しようとします。
+(4)ユーザー「fixup」は存在しないのでエイリアスの
+<code>~alias/.qmail-fixup-default</code> が評価され、
+メールは qmail 付属のメールクライアント qmail-inject に渡されます。
+(5)qmail-inject はメールに足りないヘッダーフィールドを付加し、
+実際の元の宛先アドレスに送信します。
+</p>
+<h4>壊れたメールを矯正するための設定</h4>
+<p>
+まず始めに、
+fixme ドメイン宛のメールを自ホストの仮想ドメイン宛に配送し、
+qmail-inject に渡されるようにします。
+仮想ドメインに定義したドメインは
+<code>control/locals</code> に記述しなくてもローカル配送されます。
+また、SMTP 経由で fixme ドメイン宛のメールを受け取る必要はないため、
+<code>control/rcpthosts</code> に記述する必要もありません。
+</p>
+<p>
+仮想ドメインの定義は <code>control/virtualdomains</code> ファイルに記述します。
+fixme ドメイン宛のメールが
+「fixup-<var>宛先アドレスのローカル部</var>」
+というメールボックス名に配送されるように指示します。
+<code>control/virtualdomains</code> の変更を有効にするには、
+qmail-send のプロセスに HUP シグナルを送信するか、再起動が必要です。
+</p>
+<div>
+fixme ドメイン宛メールを仮想ドメインで受信するための設定
+(<code>control/virtualdomains</code>):
+<pre class="code"><code>fixme:fixup
+</code></pre>
+</div>
+<p>
+メールボックス名「fixup-<var>宛先アドレスのローカル部</var>」
+宛のメールをすべて受け取るように、
+ワイルドカードアドレスとして
+<code>~alias/.qmail-fixup-default</code> ファイルを用意します。
+メールはこのファイルの指示に従って qmail-inject に渡されます。
+その際、宛先アドレスは「<var>実際の宛先アドレス</var>@fixme」のローカル部
+(「@」の前の部分)、つまり元の宛先アドレスに戻ります。
+環境変数についての解説は
+「<a href="./dot-qmail.html#command-interface">7.3.1 どのようにしてコマンドが起動されるのか</a>」と
+<a href="../resource/man/qmail-command.8.txt">qmail-command(8)</a>
+を参照してください。
+</p>
+<div>
+fixme ドメイン宛メールの配送指示 (<code>~alias/.qmail-fixup-default</code>):
+<pre class="code"><code>|bouncesaying 'Permission denied' [ &quot;@$HOST&quot; != &quot;@fixme&quot; ]
+|qmail-inject -f &quot;$SENDER&quot; -- &quot;$DEFAULT&quot;
+</code></pre>
+</div>
+<p>
+次に、
+問題のあるクライアントからのメールを
+「<var>実際の宛先アドレス</var>@fixme」宛にリダイレクトされるようにします。
+</p>
+<p>
+qmail-smtpd は、
+環境変数 <code>RELAYCLIENT</code> が設定されている場合、
+クライアントにメールのリレーを許可するとともに、
+クライアントから指定された宛先アドレスに
+<code>RELAYCLIENT</code> の値を追加します。
+通常は <code>RELAYCLIENT</code> は空白が設定されるようにしますが、
+問題があるクライアントからの場合は
+「<code>RELAYCLIENT=&quot;@fixme&quot;</code>」とし、
+受け取ったメールが fixme ドメイン宛に送付されるようにします。
+</p>
+<p>
+qmail-smtpd の起動に ucspi-tcp の tcpserver を利用しているのであれば、
+アクセスコントロールファイルに次のように記述します。
+この例では、問題のあるクライアントの IP アドレスが
+192.168.0.100 〜 192.168.0.120 の範囲にあるものとしています。
+</p>
+<div>
+特定のクライアントからのメールを @fixme ドメイン宛に配送するための設定 (<code>/etc/tcp.smtp</code>):
+<pre class="code"><code><em>192.168.0.100-120:allow,RELAYCLIENT=&quot;@fixme&quot;</em>
+192.168.0.:allow,RELAYCLIENT=&quot;&quot;
+:allow
+</code></pre>
+</div>
+<div>
+<code>/etc/tcp.smtp.cdb</code> の更新:
+<pre class="terminal"><code># <kbd>cd /etc</kbd>
+# <kbd>tcprules tcp.smtp.cdb tcp.smtp.$$ &lt; tcp.smtp</kbd>
+</code></pre>
+</div>
+<h4>このメール矯正方法の問題点</h4>
+<p>
+FAQ に紹介されているメール矯正の設定では、
+From: フィールドがないメールを受信すると、
+「<code>From: alias@<var>defaulthost</var></code>」
+フィールドが付加されてしまうという問題があります。
+<code>~alias/.qmail-fixup-default</code> で呼び出している
+qmail-inject の代わりに、
+次のようなラッパースクリプトを利用すれば回避できます。
+</p>
+<div>
+メールを矯正するスクリプトの例 (From: フィールドがないメールに対応):
+<pre class="code"><code>#!/bin/sh
+
+QMAILUSER=`echo $SENDER | sed 's/@[^@]*$//'`
+QMAILHOST=`echo $SENDER | sed 's/^.*@//'`
+export QMAILUSER QMAILHOST
+
+qmail-inject -f &quot;$SENDER&quot; -- &quot;$DEFAULT&quot;
+</code></pre>
+</div>
+<p>
+しかしなお、次のような問題が残ります。
+1 と 2 は sendmail にあるヘッダー内のアドレスの補完機能に似ていますが、
+qmail のこの設定では抑制できません。
+3 はほとんどないと思われるケースですが、
+まったくないとも言いきれません。
+</p>
+<ol>
+    <li>
+    From:/To:/Cc: フィールドに含まれるアドレスがアットマーク「@」を含まない場合、
+    そのアドレスにアットマークと <code>control/defaulthost</code>
+    (なければ <code>control/me</code>) のドメイン名が付加されてしまう。
+    </li>
+    <li>
+    From:/To:/Cc: フィールドに含まれるアドレスのドメイン部がドット「.」を含まない場合、
+    そのアドレスにドットと <code>control/defaultdomain</code>
+    (なければ <code>control/me</code>) のドメイン名が付加されてしまう。
+    </li>
+    <li>
+    送信者アドレスが空白かつ From: フィールドがないと、
+    From: フィールドは「<code>From: alias@<var>defaulthost</var></code>」となってしまう。
+    </li>
+</ol>
+<!-- COMMENT by fumiya
+FIXME: 以下、改訂版対応
+このほか、qmail-date-localtime.patch が適用されていないと、
+Date: フィールドのタイムゾーンが GMT になってしまう問題がある。
+これを回避するには qmail-inject の代わりに qmail 付属の
+datemail コマンドを利用する。あるいは predate
+    |predate qmail-inject -f &quot;$SENDER&quot; - - &quot;$DEFAULT&quot;
+                                                  ^
+                                                  |
+あるいは datemail コマンドを利用する。
+
+    |datemail -f &quot;$SENDER&quot; - - &quot;$DEFAULT&quot;
+                                      ^
+                                      |
+HTML のコメント中には連続したハイフンが書けないので、ここのスペースは
+実際には削除する。
+-->
+<p>
+このように、
+条件によっては望まない書き換えが実行されてしまうことがあります。
+書き換えの対象とするクライアントは、
+あなたの管理下にあるものだけに限るべきです。
+外部からのメールには適用されないように設定してください。
+</p>
+<!-- COMMENT by fumiya
+送信専用の qmail ホストを用意して、管理下のクライアントはそちらを
+利用して配送するとよいだろう。自ドメイン宛のメールを受け取るホストに
+この設定を施すのは危険である。
+-->
+
+<h3><a name="compatible-notify-bounce">10.3.6 宛先ユーザー不明によるバウンスを管理者に通知する</a></h3>
+<p>
+sendmail は自ホスト宛のメールが宛先ユーザー不明の場合、
+送信者にバウンスメールを送信するだけでなく、
+自ホストの postmaster 宛にもその旨を通知するメールを送信することができます。
+(実際にはそのほかのエラーについても通知可能らしい)
+</p>
+<!-- COMMENT by fumiya
+実際は、すべてのエラーの際、エラーが発生したメールのヘッダー部分を
+任意のアドレスに送信できるらしい。CF では COPY_ERRORS_TO パラメータ、
+sendmail.cf では O PostMasterCopy オプション (デフォルトは未定義)。
+-->
+<p>
+この動作を qmail で実現するには、
+どのエイリアス/ユーザーにも一致しない場合のワイルドカードアドレスとなる
+<code>~alias/.qmail-default</code> ファイルに細工を施します。
+</p>
+<h4>バウンスしたメールのコピーを得る方法</h4>
+<p>
+宛先ユーザー不明のメールを postmaster@example.co.jp 宛に転送する例を示します。
+bouncesaying は qmail 付属のコマンドで、
+.qmail ファイルで送信者にバウンスメールを返す場合に使用します。
+<a href="#compatible-fastforward">10.3.2 節</a>で解説している
+fastforward を利用しているなら <code>-p</code> オプションを追加して、
+<code>/etc/aliases</code> に一致する名前がなかった場合に
+fastforward 以降の配送指定が評価されるようにします。
+</p>
+<div>
+バウンスしたメールを postmaster に転送 (<code>~alias/.qmail-default</code>):
+<pre class="code"><code>&amp;postmaster@example.co.jp
+|bouncesaying 'Sorry, no mailbox here by that name. (#5.1.1)'
+</code></pre>
+</div>
+<div>
+fastforward を利用している場合 (<code>~alias/.qmail-default</code>):
+<pre class="code"><code>|fastforward <em>-p</em> /etc/aliases.cdb
+&amp;postmaster@example.co.jp
+|bouncesaying 'Sorry, no mailbox here by that name. (#5.1.1)'
+</code></pre>
+</div>
+<h4>より適切なバウンスメール情報を通知する方法</h4>
+<p>
+先の例はとてもシンプルでお手軽ですが、
+管理者に通知 (転送) されるメールに次のような問題点があります。
+</p>
+<ol>
+    <li>
+    メールのヘッダー/本文とも元のメールそのままであるため、
+    一見しただけではバウンスしたメールであることを判断することが難しい。
+    </li>
+    <li>
+    削除されたユーザー宛のメール、
+    あるいは宛先アドレスの綴り間違いがあるメールがバウンスした場合、
+    他人のプライバシーを侵害してしまう恐れがある。
+    </li>
+    <li>
+    通知先への配送がバウンスすると、
+    送信者アドレスにバウンスメールが届いてしまう。
+    </li>
+</ol>
+<p>
+そこで、この問題を対処したバウンスメール情報通知用のスクリプト
+notifynomailbox を用意しました。
+その特徴を示します。
+</p>
+<dl>
+<dt>バウンスしたメールのヘッダー部分だけを通知</dt>
+    <dd>プライバシーを侵害しないようにするため</dd>
+<dt>通常のバウンス通知メールに似た From:/To:/Subject: フィールドと本文がついたメール</dt>
+    <dd>エラー通知メールとわかるように</dd>
+<dt>送信者アドレスは空白</dt>
+    <dd>通知先への配送がバウンスした場合にループが発生しないように</dd>
+<dt>終了コードは必ず 0</dt>
+    <dd>続く bouncesaying (あるいはほかの任意の処理) が実行されるように</dd>
+</dl>
+<div>
+自ホスト宛のメールが宛先ユーザー不明によりバウンスしたことを通知するスクリプト
+(<a href="sample/notifynomailbox">notifynomailbox</a>):
+<pre class="code"><code>#!/bin/sh
+#
+# NAME
+#       notifynomailbox - Notify header of bounced mail that deliverred to
+#                         this host but no such mailbox on this host.
+#
+# SYNOPSIS
+#       in .qmail-default:
+#           |notifynomailbox address ...
+#           |bouncesaying &quot;Sorry, no mailbox here by that name. (#5.1.1)&quot;
+#
+# AUTHOR
+#       SATOH Fumiyasu &lt;fumiya-s-qmail@samba.gr.jp&gt;
+#       2001-11-05, since 2001-09-10
+#
+# VERSION
+#       1.0.3
+#
+# COPYING
+#       GNU General Public License ver.2
+
+cmd=notifynomailbox
+qmail_home=/var/qmail
+me_file=$qmail_home/control/me
+
+if [ $# -eq 0 ]; then
+    echo &quot;$cmd: usage: $cmd address ...&quot; 1&gt;&amp;2
+    exit 0
+fi
+if [ ! -s $me_file ]; then
+    echo &quot;unable to read control $me_file&quot; 1&gt;&amp;2
+    exit 0
+fi
+
+me=`cat $me_file`
+from=MAILER-DAEMON@$me
+to=''
+for t in &quot;$@&quot;; do
+    to=&quot;$to$t, &quot;
+done
+to=`echo &quot;$to&quot; | sed 's/, $//'`
+
+(cat &lt;&lt;EOF_MAIL; awk '/^$/{body=1} body==0{print}') | \
+qmail-inject -f '' -- &quot;$@&quot;
+From: $from
+To: $to
+Subject: nomailbox notice
+
+Hi. This is the $cmd program at $me.
+The qmail-send tried to deliver a message to this address, but no such
+mailbox on $me. This is a warning message for postmaster.
+Bounce notice mail was back to envelope sender $SENDER.
+
+&lt;$RECIPIENT&gt;:
+Sorry, no mailbox here by that name on this host. (#5.1.1)
+
+--- Below this line is a copy of the message (header only for privacy).
+
+Return-Path: &lt;$SENDER&gt;
+EOF_MAIL
+
+exit 0
+</code></pre>
+</div>
+<p>
+この notifynomailbox スクリプトは
+<code>/var/qmail/bin</code> などにインストールしてください。
+また、このスクリプトはあくまでも一例ですので、
+必要に応じて改造を施してください。
+次に組み込んだ例を示します。
+</p>
+<div>
+notifynomailbox の組み込み例 (<code>~alias/.qmail-default</code>):
+<pre class="code"><code>|notifynomailbox postmaster@example.co.jp
+|bouncesaying 'Sorry, no mailbox here by that name. (#5.1.1)'
+</code></pre>
+</div>
+<div>
+fastforward を利用している場合 (<code>~alias/.qmail-default</code>):
+<pre class="code"><code>|fastforward -p /etc/aliases.cdb
+|notifynomailbox postmaster@example.co.jp
+|bouncesaying 'Sorry, no mailbox here by that name. (#5.1.1)'
+</code></pre>
+</div>
+
+<!-- COMMENT by fumiya
+<h3><a name="compatible-notify-deferred">10.3.X 配送遅延の通知</a></h3>
+<p>
+http://em.ca/~bruceg/qmail-notify/
+http://www9.jp.qmail.org/qmail_bounce-0.0alpha6.tar.gz
+http://www.qmail.org/qmail_bounce-0.0alpha6.tar.gz
+http://www.ranney.com/~mjr/qmail-lagcheck
+</p>
+<h3><a name="compatible-fixcrio">10.3.X SMTP で行末に LF しか送らないクライアント対応</a></h3>
+<h3><a name="compatible-uniq-mail">10.3.X 同一の宛先を複数含んだメールを 1通だけ受けとる</a></h3>
+<p>
+eliminate-dups, eliminate-dups-1.2.tar.gz or
+procmailex(5) の例を利用:
+</p>
+<pre>
+       If  you  are subscribed to several mailinglists and people
+       cross-post to some of them, you  usually  receive  several
+       duplicate mails (one from every list).  The following sim-
+       ple recipe eliminates duplicate mails.  It  tells  formail
+       to  keep an 8KB cache file in which it will store the Mes-
+       sage-IDs of the most recent  mails  you  received.   Since
+       Message-IDs  are  guaranteed  to  be  unique for every new
+       mail, they are ideally suited to weed out duplicate mails.
+       Simply put the following recipe at the top of your rcfile,
+       and no duplicate mail will get past it.
+
+              :0 Wh: msgid.lock
+              | formail -D 8192 msgid.cache
+
+       Beware if you have delivery problems in recipes below this
+       one  and  procmail  tries to requeue the mail, then on the
+       next queue run, this mail will be considered  a  duplicate
+       and will be thrown away.  For those not quite so confident
+       in their own scripting capabilities, you can use the  fol-
+       lowing  recipe  instead.  It puts duplicates in a separate
+       folder instead of throwing them away.  It is up to you  to
+       periodically empty the folder of course.
+
+              :0 Whc: msgid.lock
+              | formail -D 8192 msgid.cache
+
+              :0 a:
+              duplicates
+</pre>
+<h3><a name="compatible-not">10.3.X 代表的な非互換な動作</a></h3>
+<ul>
+    <li>宛先ユーザー不明を SMTP セッション中に判断させる</li>
+    <li>MX に SMTP 接続した後に配送に失敗すると、それ移行の優先度の MX を試さない。(THOUGHTS)</li>
+</ul>
+-->
+
+<hr>
+<h2><a name="appendix">付録</a></h2>
+<h3><a name="appendix-reference">参考文献</a></h3>
+<dl>
+<dt>qmail の付属文書ファイル</dt>
+    <dd><a href="../source/qmail/SENDMAIL"><code>SENDMAIL</code></a></dd>
+    <dd><a href="../source/qmail/REMOVE.sendmail"><code>REMOVE.sendmail</code></a></dd>
+    <dd><a href="../source/qmail/INSTALL.vsm"><code>INSTALL.vsm</code></a></dd>
+<dt>マニュアル</dt>
+    <dd><a href="../resource/man/dot-forward.1.txt">dot-forward(1)</a></dd>
+    <dd><a href="../resource/man/fastforward.1.txt">fastforward(1)</a></dd>
+    <dd><a href="../resource/man/newinclude.1.txt">newinclude(1)</a></dd>
+    <dd>procmail(1)</dd>
+    <dd><a href="../resource/man/dot-qmail.5.txt">dot-qmail(5)</a></dd>
+    <dd><a href="../resource/man/maildir.5.txt">maildir(5)</a></dd>
+    <dd><a href="../resource/man/mbox.5.txt">mbox(5)</a></dd>
+    <dd><a href="../resource/man/qmail-control.5.txt">qmail-control(5)</a></dd>
+    <dd><a href="../resource/man/qmail-command.8.txt">qmail-command(8)</a></dd>
+    <dd><a href="../resource/man/qmail-start.8.txt">qmail-start(8)</a></dd>
+    <dd>sendmail(8)</dd>
+    <dd>mailer.conf(5) (FreeBSD)</dd>
+    <dd>rc.conf(5) (FreeBSD)</dd>
+<dt>Message-ID に関する考察 - Taki Internet Mail Private Lab.</dt>
+    <dd><a href="http://www.emaillab.org/essay/message-id.html">http://www.emaillab.org/essay/message-id.html</a></dd>
+<dt>RFC: Local Mail Transfer Protocol (LMTP)</dt>
+    <dd><a href="../resource/rfc/rfc2033.txt">RFC 2033</a></dd>
+<dt>RFC: Simple Mail Transfer Protocol (SMTP)</dt>
+    <dd><a href="../resource/rfc/rfc2821.txt">RFC 2821</a></dd>
+<dt>RFC: Internet Message Format</dt>
+    <dd><a href="../resource/rfc/rfc2822.txt">RFC 2822</a></dd>
+</dl>
+
+<h3><a name="appendix-changelog">更新履歴</a></h3>
+<dl>
+<dt>2001-12-17 佐藤文優</dt>
+    <dd>初版発行前の校正の取り込み。</dd>
+<dt>2001-11-14 佐藤文優</dt>
+    <dd>notifynomailbox を 1.0.3 に更新。</dd>
+<dt>2001-11-12 佐藤文優</dt>
+    <dd>http://www.qmail.org を紹介している箇所にミラー http://www9.jp.qmail.org を追加。</dd>
+<dt>2001-11-03 佐藤文優</dt>
+    <dd>タイトルに「qmail へ」を追加。</dd>
+<dt>2001-10-11 佐藤文優</dt>
+    <dd>「ヘッダー」→「フィールド」、あるいは「ヘッダーフィールド」</dd>
+    <dd>フィールド名のあとにコロン「:」を追加</dd>
+    <dd>「Message-Id」→「Message-ID」</dd>
+<dt>2001-10-07 佐藤文優</dt>
+    <dd>「パーミッション」→「アクセス許可」</dd>
+    <dd>「バイナリ/ソースパッケージ」→「各種バイナリ/ソースパッケージ」</dd>
+    <dd>第7章へのリンクをいくつか追加</dd>
+<dt>2001-10-01 佐藤文優</dt>
+    <dd>「送信元アドレス」→「送信者アドレス」</dd>
+<dt>2001-09-23 佐藤文優</dt>
+    <dd>「<a href="#migration-popimap">10.2.5 POP/IMAP サーバーの移行</a>」を追加</dd>
+    <dd>環境変数 MAIL の解説を追加 (<a href="#migration-mailer">10.2.6 メールクライアントの設定変更</a>)</dd>
+    <dd>root と nobody のエイリアスについての記述を追加 (<a href="#migration-alias">10.2.7 エイリアスと転送設定の移行</a>)</dd>
+    <dd>更新履歴を追加</dd>
+<dt>2001-09-13 佐藤文優</dt>
+    <dd>第1稿の完成</dd>
+<dt>2001-08-01 佐藤文優</dt>
+    <dd>執筆開始</dd>
+</dl>
+
+<hr>
+<div class="footer">
+第10章 sendmail から qmail への移行 - qmail で作る快適メールサーバー<br>
+Copyright &copy; 2001,2010 SATOH Fumiyasu<br>
+</div>
+</body>
+</html>

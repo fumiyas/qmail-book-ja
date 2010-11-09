@@ -1,0 +1,1094 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01//EN"
+                      "http://www.w3.org/TR/html4/strict.dtd">
+<html lang="ja">
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<meta http-equiv="Content-Language" content="ja">
+<meta http-equiv="Content-Style-Type" content="text/css">
+<meta name="author" lang="en" content="SATOH Fumiyasu">
+<meta name="author" lang="ja" content="佐藤 文優">
+<link rel="stylesheet" href="./book.css" type="text/css">
+<title>第9章 非常時接続環境におけるメール送受信 - qmail で作る快適メールサーバー</title>
+</head>
+<body>
+<h1><a name="top">第9章 非常時接続環境におけるメール送受信 - qmail で作る快適メールサーバー</a></h1>
+<div class="sign">
+佐藤 文優 &lt;<a href="http://www.sfo.jp/blog/">http://www.sfo.jp/blog/</a>&gt;<br>
+2001年12月17日 更新, 2001年9月18日 以来
+</div>
+
+<hr>
+<h2><a name="toc">目次</a></h2>
+<dl>
+<dt><a href="#preface">9.1 非常時接続環境における問題と解決方法</a></dt>
+<!--
+    <dd class="none"><a href="#preface-environment">9.1.1 オフライン時を考慮したメール環境</a></dd>
+    <dd class="none"><a href="#preface-message-id">9.1.2 Message-ID の一意性の問題</a></dd>
+-->
+<dt><a href="#send">9.2 非常時接続環境におけるメール送信</a></dt>
+    <dd class="none"><a href="#send-qmail">9.2.1 qmail によるメール送信</a>
+	<ul>
+	<li class="none">ローカルの qmail の配送経路の設定</li>
+	<li class="none">ローカルの qmail に配送させたいなら</li>
+	<li class="none">キューの最長滞留時間の調整</li>
+	<li class="none">qmail にキューの処理を即時開始させる</li>
+	</ul>
+    </dd>
+    <dd class="none"><a href="#send-serialmail">9.2.2 serialmail によるメール送信</a>
+	<ul>
+	<li class="none">serialmail のインストール</li>
+	<li class="none">serialmail の各種バイナリ/ソースパッケージ</li>
+	<li class="none">ほかのドメイン宛のメールをキュー用メールボックスに集約</li>
+	<li class="none">キュー用メールボックスへの配送のテスト</li>
+	<li class="none">serialmail (maildirsmtp) によるメール送信</li>
+	</ul>
+    </dd>
+<dt><a href="#receive">9.3 非常時接続環境におけるメール受信</a></dt>
+    <dd class="none"><a href="#receive-fetchmail">9.3.1 fetchmail によるメール受信</a>
+	<ul>
+	<li class="none">fetchmail のインストール</li>
+	<li class="none">ローカル配送に使う procmail の準備</li>
+	<li class="none">fetchmail によるメール受信の実験</li>
+	<li class="none">複数のユーザーのメールボックスに対応</li>
+	<li class="none">fetchmail をデーモンモードで稼働させる</li>
+	<li class="none">fetchmail 利用上の注意</li>
+	</ul>
+    </dd>
+    <dd class="none"><a href="#receive-serialmail">9.3.2 serialmail によるメール受信</a>
+	<ul>
+	<li class="none">ローカルの qmail で受信するための設定</li>
+	<li class="none">リモートの qmail の設定</li>
+	<li class="none">serialmail (maildirsmtp) によるメール受信</li>
+	</ul>
+    </dd>
+    <dd class="none"><a href="#receive-misc">9.3.3 メール受信するためのそのほかの方法</a></dd>
+<dt><a href="#appendix">付録</a></dt>
+    <dd class="none"><a href="#appendix-reference">参考文献</a></dd>
+    <dd class="none"><a href="#appendix-changelog">更新履歴</a></dd>
+</dl>
+
+<hr>
+<h2><a name="preface">9.1 非常時接続環境における問題と解決方法</a></h2>
+<!-- COMMENT by fumiya
+「9.1.2 Message-ID の一意性の問題」を書き上げるまではコメントにしておく。
+<h3><a name="preface-environment">9.1.1 オフライン時を考慮したメール環境</a></h3>
+-->
+<p>
+ADSL など安価な常時接続の手段が普及した昨今でも、
+モバイル環境やダイアルアップ接続環境といったオフライン状態があるネットワーク形態もなお残されています。
+そのような非常時接続環境では、
+オフライン状態はもちろん、
+オンライン/オフライン切り換えのタイミングにおいて考慮すべき問題がいくつか浮上します。
+</p>
+<ol>
+    <li>オフライン時のメールの送信をどう扱うか?</li>
+    <li>オフライン時に外部から自ドメイン宛に送付されたメールはどうなる?</li>
+    <li>オンラインになった時に効率良くメール送受信処理を行なうには?</li>
+    <li>オンライン/オフライン移行時のメール環境の設定の切り替えは?</li>
+    <li>一般ユーザーへの影響は?</li>
+    <li>そのほか…?</li>
+</ol>
+<p>
+消極的に、
+オフライン状態ではメールの利用を諦めるという選択肢もあります。
+メールクライアントの中には、
+オフライン時のメールの読み書きをサポートする機能を有しているものがありますので、
+そのようなメールクライアントをユーザーに利用してもらうのも手です。
+</p>
+<p>
+設定の工夫をし、オフライン状態でもオンライン状態と (ほぼ)
+変わりなくメールの送受信ができる環境が実現できれば便利です。
+ユーザーがオフライン状態を意識せずに利用できる環境を用意すれば、
+オフライン状態に関してユーザーに教育する必要がなくなります。
+また、
+あなた自身も含め、
+ユーザーはストレスなくメールの読み書きができるでしょう。
+</p>
+<p>
+<a href="send">9.2 節</a>と <a href="receive">9.3 節</a> では、
+ISP (Internet Service Provider)
+などにダイアルアップ接続するような非常時接続環境において、
+常時接続環境と同じ具合にメールの送受信が可能になるように、
+以下のような動作を実現する方法を解説しています。
+これらを実現すれば、
+オフラインの期間だけメールの配送が遅延すること以外、問題はなくなるでしょう。 
+</p>
+<dl>
+<dt>メールの送信 - <a href="send">9.2 節</a></dt>
+    <dd>
+    オフライン時にメールクライアントから送信されたメールは、
+    一時的にローカルな環境内のメールサーバーのキューに溜めておく。
+    </dd>
+    <dd>オンライン状態になったならキューのメールの配送を開始する。</dd>
+    <!--
+    <dd>再びオフライン状態になったらキューの処理を止める。</dd>
+    -->
+<dt>メールの受信 - <a href="receive">9.3 節</a></dt>
+    <dd>
+    一次的なメールの受信は、常時接続環境にあるメールサーバーに任せる。
+    </dd>
+    <dd>
+    オンライン状態になったら、
+    そのメールサーバーからメールをダウンロードする。
+    </dd>
+    <dd>
+    ローカルな環境内のホストに POP/IMAP サーバーなどを用意し、
+    メールクライアントはそれらからメールを取得するように設定する。
+    </dd>
+</dl>
+<!-- COMMENT by fumiya
+ダイアルアップオンデマンドについても触れるべきか。
+また、オフライン/オンライン移行時に任意の処理を自動実行する方法について、
+代表的なシステムでの組み込み方法を紹介すべきだろう。現在は、9.2.1 節の
+最後に少々触れている程度。
+
+ダイアルアップ
+    Red Hat Linux (ppp)
+	/etc/ppp/ip-up.local
+	/etc/ppp/ip-down.local
+    Debian GNU/Linux (ppp)
+	/etc/ppp/ip-up.d/<var>任意のスクリプト名</var>
+	/etc/ppp/ip-down.d/<var>任意のスクリプト名</var>
+    FreeBSD (ppp)
+	/etc/ppp/ip-up を書き換える?
+	/etc/ppp/ip-down を書き換える?
+PC カード
+    Linux (pcmcia-cs)
+	/etc/pcmcia/network.opts の start_fn() 関数
+	/etc/pcmcia/network.opts の stop_fn() 関数
+    FreeBSD
+	/etc/pccard_ether を書き換える?
+-->
+
+<!-- COMMENT by fumiya
+<h3><a name="preface-message-id">9.1.2 Message-ID の一意性の問題</a></h3>
+<p>
+オフラインに限らず LAN 環境でも
+</p>
+http://www.emaillab.org/essay/message-id.html
+http://www.emaillab.org/emailref/internet-drafts/draft-ietf-usefor-message-id-01.txt
+http://www.emaillab.org/emailref/internet-drafts/draft-ietf-usefor-msg-id-alt-00.txt
+-->
+
+<hr>
+<h2><a name="send">9.2 非常時接続環境におけるメール送信</a></h2>
+<h3><a name="send-qmail">9.2.1 qmail によるメール送信</a></h3>
+<p>
+多くの MTA は、
+何らかの理由で配送先のメールサーバーに接続できなかった場合、
+メールをキューに滞留し、
+しばらく時間をおいた後に配送を再試行するようになっています。
+qmail (qmail-send) の配送の仕様もそのようになっており、
+一時的な理由で配送に失敗したメールは、
+しばらくはキューに滞留し続けます。
+</p>
+<p>
+MTA のこの特性を利用するならば、
+オフライン状態になるローカルの環境内に 1つ MTA サーバーを用意して、
+ローカル環境のメールクライアントからのメール送信にそれを使用するように設定するだけで、
+目的は達成されます。
+</p>
+<h4>ローカルの qmail の配送経路の設定</h4>
+<p>
+接続先 (ISP など) に SMTP サーバーが用意されているなら、
+ローカルの qmail がそのサーバーに配送を依頼するように設定しましょう。
+</p>
+<p>
+オンライン時に DNS が利用できるなら、
+もちろんローカルの qmail 自身に配送させることもできます。
+しかし特定の SMTP サーバーに配送を任せることで、
+ローカルの qmail は宛先アドレスごとの送付先ホストの検索
+(ドメインの MX レコード検索) をしなくても済む分、
+配送にかかる時間を短縮できます。
+また、わずかですが、ネットワークの帯域を節約できます。
+接続にかかる費用が従量課金制であったり、
+ネットワーク帯域が狭いといった場合に有利です。
+</p>
+<p>
+qmail (qmail-remote) に静的な配送経路を指示するには、
+<code>control/smtproutes</code> ファイルを設定します。
+詳細は qmail 付属のマニュアル
+<a href="../resource/man/qmail-remote.8.txt">qmail-remote(8)</a>
+を参照のこと。
+<!-- FIXME: ほかの章で触れられているなら、そちらに振る。-->
+<code>control/smtproutes</code>ファイルの各行には、
+ドメイン名とそのドメイン宛のメール配送を依頼する SMTP サーバー名を、
+以下のような書式で記述します。
+</p>
+<blockquote>
+<div><code><var>ドメイン名</var>:<var>SMTP サーバー名</var>:<var>SMTP ポート番号</var></code></div>
+</blockquote>
+<p>
+リモートへのメール配送をすべて特定の SMTP サーバーに送るには、
+次のようにドメイン名を省略した行を記述します。
+ポート番号を省略すると、SMTP 標準のポート番号 (25) が利用されます。
+</p>
+<div>
+リモートへのメール配送をすべて ISP の SMTP サーバーに依頼する (<code>control/smtproutes</code>):
+<pre class="code"><code>:mailhost.isp.example.net
+</code></pre>
+</div>
+<p>
+<code>control/smtproutes</code> ファイルの設定を終えたら、
+オンライン状態でメールを送信し、
+正しく配送が行なわれることを確認してください。
+<!-- COMMENT by fumiya
+ボツ
+配送経路の指定以外の設定は特に必要ありません。
+-->
+</p>
+<h4>ローカルの qmail に配送させたいなら</h4>
+<p>
+オンライン時に qmail が稼働するホストから DNS が利用できるなら、
+qmail 自身に宛先ホストの検索 (MX レコードの検索)
+と配送を行なわせることができます。
+よって、先の節で解説した
+<code>control/smtproutes</code> ファイルの設定は必要ありません。
+</p>
+<p>
+特定のドメイン宛のメールだけ MX レコードに従い配送させたいという場合は、
+<code>control/smtproutes</code> ファイルに宛先の
+SMTP サーバー名を省略した行を記述します。
+<code>control/smtproutes</code> の設定は、
+明示的にドメインが指定されている行のほうが優先されます。
+</p>
+<div>
+特定のドメイン宛のメールは MX レコードに従い配送させる (<code>control/smtproutes</code>):
+<pre class="code"><code>:mailhost.isp.example.net
+specific.domain.example.jp:
+</code></pre>
+</div>
+<!-- COMMENT by fumiya
+以下のような環境があると思ったが、よく考えてみるとなさそう。
+あるとしたら、ローカルに存在するドメイン名宛のメールは、
+そのサブドメインも含み、リモートに配送することはできない?
+<p>
+ただし、ローカルに閉じた DNS 環境がある場合は注意が必要です。
+インターネット上の DNS に実在するドメイン名をローカルの DNS にも存在させていると問題となります。
+</p>
+-->
+<h4>キューの最長滞留時間の調整</h4>
+<p>
+長期にわたりオフライン状態になる可能性があるなら注意が必要です。
+qmail はデフォルトで 7日以上キューに滞留していたメールはバウンスし、
+送信者に返してしまいます。
+キューの最長の滞留時間は
+<code>control/queuelifetime</code> ファイルで設定可能です。
+通常であれば、
+このファイルを用意せずデフォルト
+(604800 秒、つまり 7日間) にしておけばよいでしょう。
+</p>
+<h4>qmail にキューの処理を即時開始させる</h4>
+<p>
+オンライン状態になったときに、
+qmail がキューの処理を開始するように設定します。
+放っておいても qmail (qmail-send) は定期的にメールの再送を試みますが、
+ある程度の遅延が生じます。
+また、配送の遅延が長いメールほど、
+次回の再試行までの間隔が長くなるという特性があります。
+</p>
+<p>
+例として次のようなスクリプトを作成しました。
+qmail-tcpok は qmail 付属のコマンドで、
+過去に発生した SMTP 接続のタイムアウトの記録を抹消します。
+SMTP によるリモートへのメール配送を実行する qmail-remote は、
+前回タイムアウトした配送が再び失敗すると、
+少なくとも 1時間は再送を試みません。
+また、動作中の qmail-send のプロセスにアラームシグナル (ALRM) を送ることで、
+キューに滞留しているメールの配送を即座に試みるよう促します。 
+</p>
+<div>
+qmail のキューの処理を即時開始させるスクリプト:
+<pre class="code"><code>#!/bin/sh
+/var/qmail/bin/qmail-tcpok
+killall -ALRM qmail-send
+</code></pre>
+※ Solaris の killall コマンドは、
+プロセス名を指定したシグナルの送信はサポートしていない。
+Solaris 7 以降であれば代わりに pkill コマンドを利用できる。
+</div>
+<p>
+このスクリプトは、
+オンライン状態になると同時に自動で実行されるようにしてください。
+オンラインになる方法は、通常のネットワークカードによる接続、
+PC カードによる接続、ダイアルアップ接続と様々ですが、
+オンラインまたはオフラインへの移行時に追加の処理を組み込む方法もシステムにより様々です。
+</p>
+<p>
+Red Hat Linux で ppp パッケージによりダイアルアップ接続しているなら、
+<code>/etc/ppp/ip-up</code> スクリプトのコメントに記述されている解説に従って、
+<code>/etc/ppp/ip-up.local</code> スクリプトに追加の処理を記述します。
+</p>
+<p>
+Red Hat に限らずなんらかの
+Linux 系のシステムで PC カードによりネットワーク接続しているなら、
+<code>/etc/pcmcia/network.opts</code> スクリプト内の
+<code>start_fn()</code> 関数内に上記と同じコマンドラインを記述します。
+以下に記述例を示します。
+</p>
+<div>
+オンライン時に qmail のキューの処理を即時開始させる
+(<code>/etc/pcmcia/network.opts</code>, Linux で PC カードにより接続する場合):
+<pre class="code"><code>    <var>…省略…</var>
+    # Extra stuff to do after setting up the interface
+    <em>start_fn () {
+        /var/qmail/bin/qmail-tcpok
+        killall -ALRM qmail-send
+    }</em>
+    # Extra stuff to do before shutting down the interface
+    stop_fn () { return; }
+    <var>…省略…</var>
+</code></pre>
+</div>
+
+<h3><a name="send-serialmail">9.2.2 serialmail によるメール送信</a></h3>
+<p>
+serialmail は、qmail と同じく D. J. Bernstein 氏による作品です。
+serialmail は maildir 形式のメールボックスをキューに見立て、
+メールボックス内のメールを取り出し、
+任意の SMTP サーバー (もしくは qmail 独自の QMTP サーバー)
+に配送を依頼することができます。
+</p>
+<dl>
+<dt>serialmail の Web サイト</dt>
+    <dd><a href="http://cr.yp.to/serialmail.html">http://cr.yp.to/serialmail.html</a></dd>
+</dl>
+<p>
+この節では、
+オフラインとなる環境から送信されたメールを、
+すべてキュー用の maildir 形式のメールボックスに配送し、
+オンラインになったときに serialmail 付属の
+maildirsmtp コマンドを利用してメールを送信する方法を紹介します。
+この方法は
+<a href="../source/serialmail/TOISP">serialmail の付属文書ファイル TOISP</a>
+にも記述されていますが、
+本書では maildirsmtp 起動用の専用のユーザーを用意します。
+</p>
+<div>
+図: maildirsmtp によるメール送信形態の例 (ISP にダイアルアップ接続):
+<img src="image/serialmail-toisp.png" alt="Send mail from maildir by serialmail(maildirsmtp) to ISP">
+</div>
+<h4>serialmail のインストール</h4>
+<p>
+serialmail のコンパイルとインストールの手順は qmail とほぼ同様です。
+実行バイナリやマニュアルなどは qmail と違い
+<code>/usr/local</code> 以下にインストールされます。
+</p>
+<dl>
+<dt>serialmail のソースの所在</dt>
+    <dd><a href="http://cr.yp.to/software/serialmail-0.75.tar.gz">http://cr.yp.to/software/serialmail-0.75.tar.gz</a></dd>
+    <dd><a href="ftp://ftp.jp.qmail.org/qmail/serialmail-0.75.tar.gz">ftp://ftp.jp.qmail.org/qmail/serialmail-0.75.tar.gz</a> (ミラー)</dd>
+</dl>
+<div>
+serialmail のコンパイルとインストール:
+<pre class="terminal"><code>$ <kbd>gzip -dc serialmail-0.75.tar.gz | tar xf -</kbd>
+$ <kbd>cd serialmail-0.75</kbd>
+$ <kbd>make it 2&gt;&amp;1| tee make.out</kbd>
+<var>… バイナリなどのコンパイル状況 …</var>
+$ <kbd>su</kbd>
+Password: <kbd><var>root のパスワード</var></kbd>
+# <kbd>make setup</kbd>
+./install
+# <kbd>make check</kbd>
+./instcheck
+</code></pre>
+</div>
+<h4>serialmail の各種バイナリ/ソースパッケージ</h4>
+<dl>
+<dt>バイナリ/ソース RPM パッケージ (Red Hat Linux など)</dt>
+    <dd><a href="http://www9.jp.qmail.org/rpms/qmail-addons/">http://www9.jp.qmail.org/rpms/qmail-addons/</a> (ミラー)</dd>
+    <dd><a href="http://www.qmail.org/rpms/qmail-addons/">http://www.qmail.org/rpms/qmail-addons/</a></dd>
+<dt>Debian GNU/Linux</dt>
+    <dd>
+    開発版 (unstable, sid) かテスト版 (testing, woody) に含まれている
+    「serialmail-src」というパッケージをインストールし、
+    <code>build-serialmail</code> コマンドを実行してバイナリパッケージを作成する
+    </dd>
+<dt>FreeBSD など</dt>
+    <dd>FreeBSD の ports-current に「serialmail」という port が用意されている</dd>
+</dl>
+
+<h4>ほかのドメイン宛のメールをキュー用メールボックスに集約</h4>
+<p>
+qmail の設定を変更し、
+SMTP 経由 (qmail-smtpd) もしくはローカルのコマンド (qmail-inject など)
+から配送依頼されたメールを、
+キュー用の maildir 形式のメールボックスに集めるようにします。
+これを実現するには、qmail の仮想ドメイン機能を利用します。 
+</p>
+<p>
+qmail (qmail-send) は、
+仮想ドメインのユーザー名/ドメイン名と配送先のローカルユーザーを
+<code>control/virtualdomains</code> ファイルで
+「<code><var>仮想ユーザー名</var>@<var>仮想ドメイン名</var>:<var>ローカルユーザー名</var></code>」
+という形式で指定します。
+仮想ユーザー名、またはそれに加え仮想ドメイン名は省略可能です。
+仮想ドメイン名まで省略するとワイルドカードとなり、
+あらゆるドメイン宛のメールをこの設定で受け取ることになります。
+ただし、qmail-send は <code>control/virtualdomains</code> より先に
+<code>control/locals</code> ファイルを評価するため、
+自ホスト宛に配送されたメールは仮想ドメインの設定に影響されず、
+ちゃんとローカルユーザーのメールボックスに配送されます。
+</p>
+<p>
+まずはキュー用の maildir 形式のメールボックスを用意しましょう。
+ここでは、専用のユーザー serialmail とメールボックス
+pppdir を作成することにします。
+ユーザー serialmail のホームディレクトリは
+<code>/var/qmail/serialmail</code> とします。
+</p>
+<div>
+serialmail 実行用ユーザーとキュー用メールボックスの作成:
+<pre class="terminal"><code># <kbd>useradd -m -d /var/qmail/serialmail -s /bin/sh serialmail</kbd>
+# <kbd>cd /var/qmail/serialmail</kbd>
+# <kbd>/var/qmail/bin/maildirmake pppdir</kbd>
+# <kbd>chonw -R serialmail pppdir</kbd>
+# <kbd>ls -ld pppdir</kbd>
+drwx------    5 serialmail users       120 Sep 20 21:55 pppdir
+</code></pre>
+※ ユーザーを追加する方法はシステムにより異なるため、適宜読み換えること。
+この例は多くの Linux ディストリビューションや Solaris で有効である。
+</div>
+<p>
+次に、
+仮想ドメインの設定によりユーザー serialmail に配送されるメールが
+<code>~serialmail/pppdir</code> に保存されるように、
+.qmail ファイルを用意します。
+ここでは、
+「serialmail-ppp-<var>実際の宛先アドレスのローカル部</var>」
+で受け取ることにします。
+よって、ワイルドカードな拡張アドレス定義となる
+<code>~serialmail/.qmail-ppp-default</code> を作成します。
+</p>
+<div>
+仮想ドメインで受信したメールを pppdir に配送させる:
+<pre class="terminal"><code># <kbd>su - serialmail</kbd>
+$ <kbd>echo ./pppdir/ &gt; .qmail-ppp-default</kbd>
+$ <kbd>chmod 644 .qmail-ppp-default</kbd>
+$ <kbd>exit</kbd>
+</code></pre>
+</div>
+<p>
+最後に仮想ドメインの設定を施し、
+<code>control/locals</code> のドメイン宛以外のすべてのメールが
+serial-ppp に配送されるようにします。
+<code>control/virtualdomains</code> ファイルの設定を終えたら、
+qmail-send プロセスを再起動するか HUP シグナルを送信してください。
+</p>
+<div>
+自ホスト宛以外のすべてのメールを serial-ppp で受け取る
+(<code>control/virtualdomains</code>):
+<pre class="code"><code>:serialmail-ppp
+</code></pre>
+</div>
+<h4>キュー用メールボックスへの配送のテスト</h4>
+<p>
+他ドメイン宛のメールが
+<code>~serialmail/pppdir</code> に配送されることを確認しましょう。
+通常の配送テストと同様に qmail-inject でメールを送信してみます。
+メールを送信した結果、
+<code>~serialmail/pppdir/new</code>
+ディレクトリ以下に送信したメールが保存されるはずです。
+</p>
+<p>
+保存されたメールのファイルを覗いてみると、
+qmail によっていくつかのヘッダーフィールドが追加されていることがわかります。
+その中でも Return-Path: と Delivered-To: フィールドは
+serialmail にとって重要です。
+serialmail はメールボックス内のメールを配送するときに、
+この 2つのフィールドから送信元と宛先のアドレスを決定します。
+</p>
+<div>
+キュー用メールボックスへの配送のテスト:
+<pre class="terminal"><code># <kbd>/var/qmail/bin/qmail-inject -f fumiya@local.example.com</kbd>
+<kbd>To: bob@external.example.org</kbd>
+<kbd>Subject: delivery test</kbd>
+
+<kbd>sent?</kbd>
+<kbd><var>Ctrl+d を入力</var></kbd>
+# <kbd>cd /var/qmail/serialmail/pppdir/new</kbd>
+# <kbd>ls -l</kbd>
+total 4
+-rw-------    1 serialmail users       338 Sep 20 23:01 1000994490.20471.sugar
+# <kbd>cat 1000994490.20471.sugar</kbd>
+Return-Path: &lt;<em>fumiya@local.example.com</em>&gt;
+Delivered-To: serialmail-ppp-<em>bob@external.example.org</em>
+Received: (qmail 20440 invoked by uid 0); 20 Sep 2001 14:00:35 -0000
+Date: 20 Sep 2001 14:00:22 -0000
+Message-ID: &lt;20010920140022.20439.qmail@sugar.local.example.com&gt;
+From: fumiya@local.example.com
+To: bob@external.example.org
+Subject: delivery test
+
+sent?
+</code></pre>
+</div>
+<h4>serialmail (maildirsmtp) によるメール送信</h4>
+<p>
+キュー用メールボックスに保存されたメールは、
+serialmail 付属の maildirsmtp コマンドを利用して配送します。
+maildirsmtp コマンドは、
+指定されたメールボックスからメールを読み込み、
+Return-Path: フィールドのアドレスを送信者アドレス、
+最初の Delivered-To: フィールドのアドレスから
+<var>prefix</var> (後述) を取り除いたものを宛先アドレスとして、
+指定された SMTP サーバーにメールの配送を依頼します。
+</p>
+<dl>
+<dt>書式</dt>
+    <dd><code>maildirsmtp <var>dir</var> <var>prefix</var> <var>host</var> <var>helohost</var></code></dd>
+<dt>引数</dt>
+    <dd>
+    <dl>
+	<dt><var>dir</var></dt>
+	    <dd class="none">送信すべきメールが保存されている maildir 形式のメールボックス</dd>
+	<dt><var>prefix</var></dt>
+	    <dd class="none">
+	    最初の Delivered-To: フィールドのアドレスの先頭から、
+	    この引数で指された部分を削除し、宛先のアドレスとする
+	    </dd>
+	<dt><var>host</var></dt>
+	    <dd class="none">メールの配送を依頼する SMTP サーバー</dd>
+	<dt><var>helohost</var></dt>
+	    <dd class="none">SMTP の <code>HELO</code> コマンドで通知するホスト名</dd>
+    </dl>
+    </dd>
+</dl>
+<p>
+それでは手動で maildirsmtp コマンドを実行してみましょう。
+仮想ドメインの設定により、
+最初の Delivered-To: フィールドに表われる宛先は
+「serialmail-ppp-<var>実際の宛先アドレス</var>」となるので、
+<var>prefix</var> には「serialmail-ppp-」を指定します。
+<var>host</var> には接続先にある SMTP サーバーを指定します。
+</p>
+<div>
+maildirsmtp コマンドでキュー用メールボックスのメールを送信:
+<pre class="terminal"><code># <kbd>su - serialmail</kbd>
+$ <kbd>PATH=/usr/local/bin:$PATH; export PATH</kbd>
+$ <kbd>maildirsmtp pppdir serialmail-ppp- mailhost.isp.example.net `hostname`</kbd>
+</code></pre>
+</div>
+<p>
+<a href="send-qmail">9.2.1 節</a>の
+「qmail にキューの処理を即時開始させる」で解説しているのと同様に、
+オンラインになったときに自動でメール送信処理が開始されるようにしましょう。
+以下にスクリプトの例を示します。
+Red Hat Linux の ppp パッケージでダイアルアップ接続しているなら、
+<code>/etc/ppp/ip-up.local</code> スクリプトに組み込んでください。
+</p>
+<div>
+maildirsmtp コマンドでキューのメールを送信させるスクリプト:
+<pre class="code"><code>#!/bin/sh
+ms_cmd=/usr/local/bin/maildirsmtp
+ms_user=serialmail
+ms_dir=pppdir
+ms_prefix=$ms_user-ppp-
+ms_host=<var>mailhost.isp.example.net</var>
+ms_helohost=`head -1 /var/qmail/control/me`
+if [ -f /var/qmail/control/helohost ]; then
+    ms_helohost=`head -1 /var/qmail/control/helohost`
+fi
+su - $ms_user -c &quot;$ms_cmd $ms_dir $ms_prefix $ms_host $ms_helohost&quot;
+</code></pre>
+※ このスクシプトは root が起動することを想定している。<br>
+※ この例では、
+<var>helohost</var> の値を qmail の設定により決定している。
+</div>
+
+<hr>
+<h2><a name="receive">9.3 非常時接続環境におけるメール受信</a></h2>
+<p>
+この節では、
+接続先にあるメールサーバーに到着しているメールをオンライン時にダウンロードし、
+ローカルのメールボックスに配送する方法を紹介します。
+ローカル環境に POP/IMAP サーバーを用意すれば、
+オフライン時でも支障なくメールを読むことができます
+(もちろん、メールボックスを保持するホストで直接メールボックスを参照するメールクライアントを利用すれば、ローカルの POP/IMAP サーバーは必要ありません)。
+</p>
+<h3><a name="receive-fetchmail">9.3.1 fetchmail によるメール受信</a></h3>
+<!-- COMMENT by fumiya
+qmail mailing list では、getmail のほうが評判がいい(ようだ)。
+-->
+<p>
+fetchmail は、非常時接続環境において、
+効率的にメールを取得・転送するためのソフトウェアです。
+具体的には、
+fetchmail はリモートの POP/IMAP サーバーからメールをダウンロードし、
+任意の MTA かローカルメーラーに配送を依頼することができます。
+</p>
+<!-- COMMENT by fumiya
+ETRN (RFC 1985) について触れるべきか?
+-->
+<dl>
+<dt>fetchmail の Web サイト</dt>
+    <dd><a href="http://tuxedo.org/~esr/fetchmail/">http://tuxedo.org/~esr/fetchmail/</a></dd>
+</dl>
+<h4>fetchmail のインストール</h4>
+<p>
+以下に procmail のコンパイルとインストール例を示します。
+カスタマイズしてコンパイルする場合は、
+configure スクリプトに適宜オプションを指定します。
+詳細は付属の INSTALL ファイルと
+`<code>./configure --help</code>` の出力を参照のこと。
+デフォルトでは <code>/usr/local</code> 以下にインストールされます。
+</p>
+<dl>
+<dt>fetchmail のソースの所在</dt>
+    <dd><a href="http://tuxedo.org/~esr/fetchmail/">http://tuxedo.org/~esr/fetchmail/</a></dd>
+    <dd><a href="ftp://ftp.win.ne.jp/pub/network/mail/fetchmail/">ftp://ftp.win.ne.jp/pub/network/mail/fetchmail/</a> (ミラー)</dd>
+</dl>
+<div>
+fetchmail のコンパイルとインストール:
+<pre class="terminal"><code>$ <kbd>gzip -dc fetchmail-5.9.5.tar.gz | tar xf -</kbd>
+$ <kbd>cd fetchmail-5.9.5</kbd>
+$ <kbd>./configure 2&gt;&amp;1| tee configure.out</kbd>
+<var>… コンパイル前の準備の状況 …</var>
+$ <kbd>make 2&gt;&amp;1| tee make.out</kbd>
+<var>… バイナリなどのコンパイル状況 …</var>
+$ <kbd>su</kbd>
+Password: <kbd><var>root のパスワード</var></kbd>
+# <kbd>make install 2&gt;&amp;1| tee make_install.out</kbd>
+<var>… インストール状況 …</var>
+</code></pre>
+</div>
+<p>
+Linux ディストリビューションや FreeBSD などでは標準で
+fetchmail のパッケージが用意されていることでしょう。
+お手軽にそちらをインストールしてご利用ください。
+</p>
+
+<h4>ローカル配送に使う procmail の準備</h4>
+<p>
+この後の解説では、
+fetchmail でダウンロードしたメールを、
+procmail を利用してメールボックスに配送させています。
+procmail のソースからのコンパイル/インストールについては、
+「<a href="./sendmail.html#compatible-vsm">10.3.4 sendmail と同じメールボックスヘの配送</a>」を参照のこと。
+</p>
+<p>
+procmail の標準設定では、メールは sendmail と同じ、
+共有スプールディレクトリ内の mbox 形式のメールボックスに配送します。
+これを変更するには、システム全体の procmail の設定ファイル
+<code>/etc/procmailrc</code> を用意します。
+例えば、デフォルトで各ユーザーのホームディレクトリの maildir 形式のメールボックスに配送させるには、以下のように記述します。 
+</p>
+<div>
+procmail のデフォルトの配送先の指定 (<code>/etc/procmailrc</code>):
+<pre class="code"><code>DEFAULT = $HOME/Maildir/
+</code></pre>
+</div>
+
+<h4>fetchmail によるメール受信の実験</h4>
+<p>
+あるユーザーで個人用の fetchmail の設定をして、動作のテストをしてみましょう。
+ユーザー用の標準の設定ファイルはホームディレクトリの .fetchmailrc になります。
+以下に POP3 サーバーからメールをダウンロードし、
+procmail を利用してメールボックスへ配送させるための
+.fetchmailrc の例を示します。
+fetchmail は、
+設定ファイルのアクセス許可がほかのユーザーが参照できる状態になっていると、
+実行を拒否します。
+`<code>chmod 600 .fetchmailrc</code>` などとしておきましょう。
+</p>
+<div>
+POP3 サーバーからのダウンロードと procmail による配送 (<code>~/.fetchmailrc</code>):
+<pre class="code"><code>defaults
+    protocol pop3
+    keep
+    no mimedecode
+    mda &quot;/usr/local/bin/procmail -f'%F'&quot;
+
+poll mailhost.isp.example.net
+    user &quot;fsatoh&quot; pass &quot;fumiya's-pass&quot;
+</code></pre>
+※ この設定例では keep キーワードを指定してあるため、
+サーバーのメールボックスからメールは削除されないことに注意。
+</div>
+<p>
+ここで記述している設定の意味は以下の通りです。
+ここではテストのために fetchmail を実行するので、
+keep キーワードを指定しています。
+詳細は fetchmail(1) などを参照のこと。
+</p>
+<dl>
+<dt>defaults</dt>
+    <dd>この行以降にデフォルトの設定を記述する</dd>
+<dt>protocol pop3</dt>
+    <dd>ダウンロード元のサーバーとの通信プロトコルを POP3 とする</dd>
+<dt>keep</dt>
+    <dd>ダウンロードしたメールをサーバー上から削除せずに残す</dd>
+<dt>no mimedecode</dt>
+    <dd>quoted-printable 形式で MIME エンコードされた部分をデコードしないようにする</dd>
+    <dd>最近の fetchmail はこれがデフォルト</dd>
+<dt>mda &quot;/usr/local/bin/procmail -f'%F'&quot;</dt>
+    <dd>配送を依頼するコマンド (Mail Delivery Agent) の指定</dd>
+    <dd>%F は実行時に送信者アドレスに置き換えられる</dd>
+    <dd>procmail の -f オプションは送信者アドレスを指定するためのもの</dd>
+<dt>poll mailhost.isp.example.net</dt>
+    <dd>ダウンロード元のサーバー名の指定</dd>
+    <dd>この行以降にこのサーバー固有の設定を記述する</dd>
+<dt>user &quot;fsatoh&quot; pass &quot;fsatoh's-pass&quot;</dt>
+    <dd>サーバーのメールボックスアクセス用のユーザー名とパスワードの指定</dd>
+</dl>
+<div>
+fetchmail の手動実行によるメール配送:
+<pre class="terminal"><code>$ <kbd>fetchmail</kbd> 
+4 messages for fumiya at mailhost.isp.example.net (15562 octets).
+reading message 1 of 4 (4129 octets) .... not flushed
+reading message 2 of 4 (2289 octets) .. not flushed
+reading message 3 of 4 (6031 octets) ..... not flushed
+reading message 4 of 4 (3113 octets) ... not flushed
+</code></pre>
+</div>
+<h4>複数のユーザーのメールボックスに対応</h4>
+<p>
+複数のユーザーのメールボックスをまとめてダウンロードし、
+ローカルのメールボックスに保存するための設定を解説します。
+ここでは fetchmail から procmail を利用して各ユーザーのメールボックスに保存させるため、fetchmail を root 権限で動作させます。
+</p>
+<p>
+procmailrc ファイルは次のようになります。
+メールボックスにアクセスするためのユーザー名/パスワード指定に加え、
+配送先のローカルユーザーのログイン名を to キーワードに続けて指定します。
+これは双方のユーザー名が一致している際も必要です。
+mda キーワードの procmail には、
+配送先のローカルのユーザー名を指定する -d オプションを追加します。
+%s は、実行時に to キーワードで指定されたユーザー名に置き換えられます。
+</p>
+<div>
+複数のユーザーのメールをまとめてダウンロードする設定
+(<code>/etc/fetchmailrc</code>):
+<pre class="code"><code>defaults
+    protocol pop3
+    no mimedecode
+    mda &quot;/usr/local/bin/procmail -f'%F' -d'%s'&quot;
+
+poll mailhost.isp.example.net
+    user &quot;fsatoh&quot; pass &quot;fsatoh's-pass&quot; to &quot;fumiya&quot;
+    user &quot;bob&quot; pass &quot;bob's-pass&quot; to &quot;bob&quot;
+    user &quot;carol&quot; pass &quot;carol's-pass&quot; to &quot;carol&quot;
+</code></pre>
+※ ファイルのアクセス権は 0600 (-rw-------) にすること
+</div>
+<p>
+スーパーユーザーになり、手動で fetchmail を実行してみましょう。
+fetchmail に特定の設定ファイルを指示するには -f オプションを用います。
+</p>
+<div>
+fetchmail の手動実行によるメール配送 (複数ユーザー対応):
+<pre class="terminal"><code>$ <kbd>su</kbd> 
+Password: <kbd><var>root のパスワード</var></kbd>
+# <kbd>fetchmail -f /etc/fetchmailrc</kbd>
+<var>…ダウンロードと配送の状況…</var>
+</code></pre>
+</div>
+<h4>fetchmail をデーモンモードで稼働させる</h4>
+<p>
+fetchmail をデーモンモードで稼働させることで、
+メールのダウンロードと配送を定期的に実行させることができます。
+デーモンモードで稼働させるには、<code>--daemon</code> オプションと、
+ダウンロードと配送を実行する間隔を秒数で指定します。
+デーモンプロセスによる実行の経過が syslog により記録されるように、
+<code>--syslog</code> オプションも同時に指定するとよいでしょう。
+稼働中の fetchmail デーモンプロセスは、
+</p>
+<div>
+fetchmail デーモンの起動 (複数ユーザー対応):
+<pre class="terminal"><code>$ <kbd>su</kbd> 
+Password: <kbd><var>root のパスワード</var></kbd>
+# <kbd>fetchmail -f /etc/fetchmailrc --daemon 300 --syslog</kbd>
+</code></pre>
+</div>
+<p>
+fetchmail に -q オプションを指定して実行することで停止することができます。
+必要であれば、オフライン状態に戻ったときに停止させましょう。
+</p>
+<div>
+fetchmail デーモンの停止:
+<pre class="terminal"><code># <kbd>fetchmail -q</kbd>
+fetchmail: background fetchmail at 6497 killed.
+</code></pre>
+</div>
+<!--
+<div>
+ダイアルアップ接続の確立後に fetchmail を起動 (<code>/etc/ppp/ip-up.local</code>):
+<pre class="code"><code>#!/bin/sh
+fetchmail -f /etc/fetchmailrc - -daemon 300 - -syslog
+</code></pre>
+</div>
+<div>
+ダイアルアップ接続の切断後に fetchmail を停止 (<code>/etc/ppp/ip-down.local</code>):
+<pre class="code"><code>#!/bin/sh
+fetchmail -q
+</code></pre>
+</div>
+-->
+
+<h4>fetchmail 利用上の注意</h4>
+<p>
+fetchmail は、
+ダウンロードしたメールを procmail のようなローカルメーラーに渡す方法のほか、
+任意の SMTP サーバーに渡して内部環境へのメール配送を依頼することもできます。
+fetchmail を稼働させるホストとメールボックスを保持するホストが別の場合は、
+この方法を用いて配送するとよいでしょう。
+fetchmail をスーパーユーザー権限で動作させる必要がなくなるため、
+より安全であるというメリットもあります。
+</p>
+<!-- COMMENT by fumiya
+先の節で、MDA でなく MTA を使う例を紹介すべき?
+-->
+<p>
+ただし fetchmail で SMTP サーバー (MTA) を利用する場合は細心の注意を払うようにしてください。
+過去に数回、fetchmail や MTA の設定ミスにより、
+次のような現象に遭遇したことがあります。
+しかもこのような現象は運用している本人にはすぐにはわからず、
+テストを繰り返すうちに被害を拡大してしまう例が多くあります。
+</p>
+<ul>
+    <li>
+    内部の MTA がメールの配送に失敗し、
+    バウンス通知メールが送信者に大量に届き、迷惑をかけた。
+    </li>
+    <li>
+    メールの配送先の指定が間違っていてメールが逆流し、
+    メーリングリストに過去に流れたメールが再び投稿された (2重投稿)。
+    </li>
+</ul>
+<p>
+「<a href="./FIXME">1.8.2 エンベローブアドレス</a>」以降の節で解説しているように、
+MTA に指示した送信者アドレスと宛先アドレスは、
+メールに含まれる
+From: フィールド, To:/Cc: フィールドのアドレスと一致しないことがあります。
+一方メールのそのほかのヘッダーフィールドには、
+明示的に送信者アドレス/宛先アドレスを示すものが含まれていないことがあります。
+</p>
+<p>
+fetchmail はリモートのメールボックスから取得したメールを再配送するために、
+いくつかのヘッダーフィールドから送信者アドレスと宛先アドレスを「類推」します。
+このため時には類推に失敗し、誤ったアドレスを導き出す可能性があります。
+先の紹介したような fetchmail の障害は、
+この苦肉の策によって引き起こされているのかもしれません。
+</p>
+<p>
+qmail (qmail-local) は、
+メールをメールボックスに保存するときに、
+Return-Path: フィールドに送信者アドレス、
+Delivered-To: フィールドに最終的な宛先アドレスを記録します。
+エイリアスなどにより転送する際も、
+qmail は元の宛先アドレスを追加の Delivered-To: フィールドに記録します。
+</p>
+<p>
+ダウンロード元のメールボックスサーバーが qmail でメールを受信しているなら、
+fetchmail が Return-Path:/Delivered-To: フィールドを参照するように
+-E Return-Path オプション (envelope キーワード)、
+-Q <var>prefix</var> オプション (qvirtual キーワード)
+などを指定するとよいでしょう。
+オプションの詳細は fetchmail(1) を参照してください。
+</p>
+
+<h3><a name="receive-serialmail">9.3.2 serialmail によるメール受信</a></h3>
+<p>
+送信と同じように、
+受信においても serialmail を利用できます。
+ただし、メールボックスは接続先のメールサーバーに保持されており、
+そのホスト上で serialmail を実行しなければなりません。
+この節で紹介する設定例は、
+接続先 (ISP など) に qmail (あるいは互換 MTA) と serialmail が用意され、
+SSH などの方法でローカルから接続先の serialmail (maildirsmtp) を実行できることが前提です。
+この方法は
+<a href="../source/serialmail/FROMISP">serialmail の付属文書ファイル FROMISP</a>
+にも紹介されています。
+</p>
+<div>
+図: maildirsmtp によるメール受信形態の例
+(ISP にダイアルアップ接続):
+<img src="image/serialmail-fromisp.png" alt="Receive mail from maildir on ISP via maildirsmtp">
+</div>
+<p>
+これ以降の解説では、
+以下のような環境でメールを受信することとします。
+また、ダイアルアップ接続するホストには受信用の
+qmail が稼働していることにします。
+</p>
+<dl>
+<dt>接続形態</dt>
+    <dd>ISP へのダイアルアップ IP 接続</dd>
+<dt>受信するメールのドメインの名前</dt>
+    <dd>yoursite.example.com</dd>
+<dt>メールボックスを保持している ISP のホストの名前</dt>
+    <dd>mailhost.isp.example.net</dd>
+<dt>mailhost.isp.example.net へのログイン権限を与えられたユーザー</dt>
+    <dd>youraccount</dd>
+</dl>
+<h4>ローカルの qmail で受信するための設定</h4>
+<p>
+ローカル環境に qmail (qmail-smtpd) などの SMTP サーバーを用意し、
+リモートの maildirsmtp コマンドから配送されるメールを受け取れるようにします。
+</p>
+<p>
+yoursite.example.com ドメイン宛のメールは DNS の MX の設定により
+ISP のメールサーバー内のメールボックスに配送されます。
+これを maildirsmtp コマンドでローカルの SMTP サーバーに配送するわけですが、
+その際の宛先アドレスのドメイン名は元のまま yoursite.example.com になります。
+そこで、ローカルの qmail の設定ファイル <code>control/rcpthosts</code> と
+<code>control/locals</code> ファイルに yoursite.example.com を記述します。
+</p>
+<!-- COMMENT by fumiya
+以下、とりあえずボツ。将来、機会があれば採用。
+
+あなた一人分だけのメールを受信するのであれば、
+
+control/virtualdomains:
+remotename@yoursite.example.com:localname-serialmail
+
+control/rcpthosts
+yoursite.example.com
+
+touch ~localname/.qmail-serialmail-remotename(?)
+-->
+<h4>リモートの qmail の設定</h4>
+<p>
+接続先 (ISP など) の qmail では、
+yoursite.example.com ドメイン宛のすべてのユーザーのメールを、
+単一のメールボックスに配送するように設定してもらいましょう。
+ユーザーごとにメールボックスが分かれていても、
+その数だけ maildirsmtp を起動すれば対応できますが、
+一つにまとまっていたほうが簡単です。
+</p>
+<p>
+次のように、
+仮想ドメインの設定で
+yoursite.example.com ドメイン宛のメールを youraccount に配送するように設定し、
+ユーザー youraccount の .qmail ファイルで保存先のメールボックスを指定します。
+</p>
+<div>
+yoursite.example.com ドメイン宛のメールをユーザー youraccount-ppp に配送させる
+(ISP ホストの <code>control/virtualdomains</code>):
+<pre class="code"><code>yoursite.example.com:youraccount-ppp
+</code></pre>
+</div>
+<div>
+youraccount-ppp 宛のメールを ./pppdir/ に保存させる (ISP ホストの <code>~youraccount/.qmail-ppp-default</code>):
+<pre class="code"><code>./pppdir/
+</code></pre>
+</div>
+<h4>serialmail (maildirsmtp) によるメール受信</h4>
+<p>
+maildirsmtp のインストール方法やコマンドライン引数については
+「<a href="#send-serialmail">9.2.2 serialmail (maildirsmtp) によるメール送信</a>」を参照のこと。
+ここでの使い方も基本的に送信の場合と同じです。
+ただし、
+メールボックスがある接続先 (ここでは ISP) のホストにログインして
+maildirsmtp コマンドを実行しなければなりません。
+</p>
+<p>
+オンライン時に動的に IP アドレスが割り当てられるなら、
+まずはそのアドレスを求めます。
+端末型ダイアルアップ接続であれば、大抵は動的割り当てになっていることでしょう。
+ネットワークインターフェイスに割り当てられている IP アドレスを知るには、
+ifconfig コマンドを利用します。
+</p>
+<div>
+ダイアルアップ接続で割り当てられた IP アドレスを求める
+(ダイアルアップで使用しているインターフェイスが ppp0 の場合):
+<pre class="terminal"><code>local$ <kbd>/sbin/ifconfig ppp0</kbd>
+ppp0      Link encap:Point-to-Point Protocol  
+          inet addr:<em>172.25.0.198</em>  P-t-P:172.25.0.1  Mask:255.255.255.255
+          UP POINTOPOINT RUNNING NOARP MULTICAST  MTU:1524  Metric:1
+          RX packets:10 errors:0 dropped:0 overruns:0 frame:0
+          TX packets:12 errors:0 dropped:0 overruns:0 carrier:0
+          collisions:0 txqueuelen:3 
+          RX bytes:831 (831.0 b)  TX bytes:564 (564.0 b)
+</code></pre>
+<!-- COMMENT by fumiya
+Debuan GNU/Linux (sid), ppp 2.4.1-4 にて。
+-->
+</div>
+<p>
+自分のサイトに割り当てられた IP アドレスが判明したら、
+ISP のメールサーバーに SSH (Secure SHell) などの手段でログインし、
+maildirsmtp コマンドを起動してメールボックスのメールを自分のサイトの
+SMTP サーバーに向けて送信します。
+メールボックス内のメールの最初の Delivered-To: フィールドは、
+仮想ドメインによる配送指示によって
+「youraccount-ppp-<var>宛先ユーザー名</var>@yoursite.example.com」
+となります。
+よって、maildirsmtp コマンドの <var>prefix</var> には
+「youraccount-ppp-」を指定します。
+</p>
+<div>
+ISP のホストへのログインとローカルの SMTP サーバーへのメール配送:
+<pre class="terminal"><code>local$ <kbd>ssh -l youraccount mailhost.isp.example.net</kbd>
+Enter passphrase for RSA key 'yourname@local.yoursite.example.com': <var>秘密鍵のパスフレーズを入力</var>
+mailhost$ <kbd>maildirsmtp pppdir youraccount-ppp- <em>172.25.0.198</em> `hostname`</kbd>
+</code></pre>
+</div>
+
+<h3><a name="receive-misc">9.3.3 メール受信するためのそのほかの方法</a></h3>
+<p>
+<a href="../resource/rfc/rfc1985.txt">RFC 1985</a>
+「SMTP Service Extension for Remote Message Queue Starting」
+には、
+リモートの SMTP サーバーに対し、
+キューに滞留しているメールを即時送信するよう要求するための SMTP 拡張コマンド、
+<code>ETRN</code> が定義されています。
+<a href="#receive-fetchmail">9.3.1 節</a>で紹介している fetchmail は
+<code>ETRN</code> コマンドの発行をサポートしています。
+</p>
+<p>
+qmail (qmail-smtpd) は <code>ETRN</code> コマンドに対応していませんが、
+<code>ETRN</code> と同様の動作を実現する方法が
+<a href="../source/serialmail/AUTOTURN">serialmail の付属文書ファイル AUTOTURN</a>
+で紹介されています。
+また、qmail に <code>ETRN</code> を実装するためのパッチも存在します。
+</p>
+<dl>
+<dt>qmail の <code>ETRN</code> コマンド対応パッチの所在</dt>
+    <dd><a href="ftp://ftp.win.ne.jp/pub/network/mail/qmail/qmail-etrn-0.1f.diff">ftp://ftp.win.ne.jp/pub/network/mail/qmail/qmail-etrn-0.1f.diff</a></dd>
+    <!--消失?<dd><a href="http://www.cqc.com/~pacman/projects/qmail-etrn/">http://www.cqc.com/~pacman/projects/qmail-etrn/</a></dd>-->
+</dl>
+
+<hr>
+<h2><a name="appendix">付録</a></h2>
+<h3><a name="appendix-reference">参考文献</a></h3>
+<dl>
+<dt>serialmail の付属文書ファイル</dt>
+    <dd><a href="../source/serialmail/TOISP">TOISP</a></dd>
+    <dd><a href="../source/serialmail/FROMISP">FROMISP</a></dd>
+    <dd><a href="../source/serialmail/AUTOTURN">AUTOTURN</a></dd>
+<dt>マニュアル</dt>
+    <dd>fetchmail(1)</dd>
+    <dd>procmail(1)</dd>
+    <dd><a href="../resource/man/maildirsmtp.1.txt">maildirsmtp(1)</a></dd>
+    <dd><a href="../resource/man/dot-qmail.5.txt">dot-qmail(5)</a></dd>
+    <dd><a href="../resource/man/qmail-remote.8.txt">qmail-remote(8)</a></dd>
+    <dd><a href="../resource/man/qmail-send.8.txt">qmail-send(8)</a></dd>
+<dt>オフラインでメール</dt>
+    <dd><a href="http://plaza17.mbn.or.jp/~chi/FreeBSD/HowTo/mail/">http://plaza17.mbn.or.jp/~chi/FreeBSD/HowTo/mail/</a></dd>
+<dt>RFC: SMTP Service Extension for Remote Message Queue Starting</dt>
+    <dd><a href="../resource/rfc/rfc1985.txt">RFC 1985</a></dd>
+</dl>
+<h3><a name="appendix-changelog">更新履歴</a></h3>
+<dl>
+<dt>2001-12-17 佐藤文優</dt>
+    <dd>初版発行前の校正の取り込み。</dd>
+<dt>2001-11-12 佐藤文優</dt>
+    <dd>http://www.qmail.org を紹介している箇所にミラー http://www9.jp.qmail.org を追加。</dd>
+<dt>2001-10-11 佐藤文優</dt>
+    <dd>フィールド名のあとにコロン「:」を追加</dd>
+<dt>2001-10-08 佐藤文優</dt>
+    <dd>「ヘッダー」→「フィールド」、あるいは「ヘッダーフィールド」</dd>
+<dt>2001-10-07 佐藤文優</dt>
+    <dd>第1稿の完成</dd>
+<dt>2001-09-18 佐藤文優</dt>
+    <dd>執筆開始</dd>
+</dl>
+
+<hr>
+<div class="footer">
+第9章 非常時接続環境におけるメール送受信 - qmail で作る快適メールサーバー<br>
+Copyright &copy; 2001,2010 SATOH Fumiyasu<br>
+</div>
+</body>
+</html>

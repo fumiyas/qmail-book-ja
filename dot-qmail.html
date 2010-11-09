@@ -1,0 +1,1250 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01//EN"
+                      "http://www.w3.org/TR/html4/strict.dtd">
+<html lang="ja">
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<meta http-equiv="Content-Language" content="ja">
+<meta http-equiv="Content-Style-Type" content="text/css">
+<meta name="author" lang="en" content="SATOH Fumiyasu">
+<meta name="author" lang="ja" content="佐藤 文優">
+<link rel="stylesheet" href="./book.css" type="text/css">
+<title>第7章 .qmail ファイルの利用 - qmail で作る快適メールサーバー</title>
+</head>
+<body>
+<h1><a name="top">第7章 .qmail ファイルの利用 - qmail で作る快適メールサーバー</a></h1>
+<div class="sign">
+佐藤 文優 &lt;<a href="http://www.sfo.jp/blog/">http://www.sfo.jp/blog/</a>&gt;<br>
+2001年12月17日 更新, 2001年9月24日 以来
+</div>
+
+<hr>
+<h2><a name="toc">目次</a></h2>
+<dl>
+<dt><a href="#basic">7.1 .qmail ファイルとは?</a></dt>
+    <dd class="none"><a href="#basic-purpose">7.1.1 .qmail ファイルの役割り</a></dd>
+    <dd class="none"><a href="#basic-format">7.1.2 .qmail ファイルの書式</a></dd>
+    <dd class="none"><a href="#basic-address">7.1.3 転送先のアドレスの書式</a></dd>
+    <dd class="none"><a href="#basic-permission">7.1.4 .qmail ファイルとアクセス許可</a>
+	<ul>
+	<li class="none">.qmail ファイルが危険なアクセス許可を持つ場合</li>
+	<li class="none">転送以外の処理指定を拒否させる</li>
+	<li class="none">安全に .qmail ファイルを編集する</li>
+	</ul>
+    </dd>
+<dt><a href="#extension">7.2 拡張メールアドレス</a></dt>
+    <dd class="none"><a href="#extension-make">7.2.1 拡張メールアドレスを用意する</a></dd>
+    <dd class="none"><a href="#extension-wildcard">7.2.2 ワイルドカードアドレス</a></dd>
+    <dd class="none"><a href="#extension-owner">7.2.3 転送時の送信者アドレスの変更</a></dd>
+<dt><a href="#command">7.3 コマンドによるメールの処理</a></dt>
+    <dd class="none"><a href="#command-interface">7.3.1 どのようにしてコマンドが起動されるのか</a>
+	<ul>
+	<li class="none">コマンドの起動から終了までの流れ</li>
+	<li class="none">メールの受け渡し</li>
+	<li class="none">環境変数</li>
+	<li class="none">コマンドの終了コードの評価</li>
+	<li class="none">.forward 用コマンドとの終了コードの違い</li>
+	</ul>
+    </dd>
+    <dd class="none"><a href="#command-qmail">7.3.2 qmail 付属の .qmail 用コマンド</a>
+	<ul>
+	<li class="none">メールの転送 - forward</li>
+	<li class="none">条件によりメールを転送 - condredirect</li>
+	<li class="none">条件によりメールをバウンス - bouncesaying</li>
+	<li class="none">条件の反転 - except</li>
+	<li class="none">配送完了を送信者に通知 - qreceipt</li>
+	<li class="none">メールの到着をユーザーに通知 - qbiff</li>
+	<li class="none">.forward 用コマンドの利用 - preline</li>
+	</ul>
+    </dd>
+    <dd class="none"><a href="#command-misc">7.3.3 .qmail でのコマンド処理に役立つソフトウェア</a>
+	<ul>
+	<li class="none">メールメッセージの解析 - mess822</li>
+	<li class="none">qmail 用の作成されたユーティリティ - qtools</li>
+<!-- COMMENT by fumiya
+	<li class="none">ファイルへの出力を安全に行うコマンド - safecat</li>
+-->
+	</ul>
+    </dd>
+<dt><a href="#appendix">付録</a></dt>
+    <dd class="none"><a href="#appendix-reference">参考文献</a></dd>
+    <dd class="none"><a href="#appendix-changelog">更新履歴</a></dd>
+</dl>
+
+<hr>
+<h2><a name="basic">7.1 .qmail ファイルとは?</a></h2>
+<p>
+この節では .qmail ファイルの基本的な事柄を解説します。
+.qmail ファイルは sendmail の .forward ファイルに似た用途を持ち、
+書式や動作も似通っていますが、
+いくつか異なる点があります。
+qmail 付属のマニュアル
+<a href="../resource/man/dot-qmail.5.txt">dot-qmail(5)</a>
+も参照のこと。
+</p>
+<h3><a name="basic-purpose">7.1.1 .qmail ファイルの役割り</a></h3>
+<p>
+.qmail ファイルは通常はユーザーのホームディレクトリに置かれ、
+ユーザーに配送されたメールをどのように扱うかを制御します。
+メールの配送指定には、次のいずれかの方法を指定できます。
+</p>
+<ul>
+<li>maildir 形式のメールボックスへの保存</li>
+<li>mbox 形式のメールボックスへの保存</li>
+<li>ほかのメールアドレスへの転送</li>
+<li>コマンドを起動して標準入力に渡す</li>
+</ul>
+<p>
+.qmail ファイルを評価して指定された配送処理を実行するのは
+qmail-local コマンドです。
+.qmail ファイルが存在しない、
+あるいは .qmail ファイルのサイズが 0 バイトの場合、
+qmail-local は
+qmail-start コマンドを介して指定されたデフォルトの配送方法を実行します。
+ただし、拡張メールアドレス (→<a href="#extension">7.2節</a>) の場合は、
+対応する .qmail ファイルが存在しない場合、
+メールはバウンスされます。
+</p>
+<p>
+qmail-local は、
+作業ディレクトリをユーザーのホームディレクトリに移動してから
+.qmail ファイルを評価します。
+よって、
+メールボックスやコマンドのパス名に相対パスを指定すると、
+ホームディレクトリを基点としたパスを参照することになります。
+</p>
+<p>
+qmail-lspawn は、
+プロセスの実効権限をユーザーの UID, GID に変更したあとに
+qmail-local を起動します。
+よって、qmail-local によるメールボックスへの保存やコマンドの起動などの処理は、
+ユーザーの権限で実行されます。
+</p>
+
+<h3><a name="basic-format">7.1.2 .qmail ファイルの書式</a></h3>
+<p>
+.qmail ファイルには 1行以上の行を記述し、
+各行が 1つのメール配送の指定となります。
+記述可能なものは、
+コメント、
+maildir 形式のメールボックスのパス、
+mbox 形式のメールボックスのパス、
+転送先のアドレス、
+起動するコマンドのいずれかです。
+</p>
+<dl>
+<dt>コメント (無視される)</dt>
+    <dd>行頭を「<code>#</code>」で始める</dd>
+    <dd>例: <code># This is a comment. I love comments.</code></dd>
+<dt>maildir 形式のメールボックスへの保存</dt>
+    <dd>「<code>.</code>」か「<code>/</code>」で始めてメールボックスのパスを記述し、パスの末尾に「<code>/</code>」を付ける</dd>
+    <dd>例: <code>./Maildir/</code></dd>
+<dt>mbox 形式のメールボックスへの保存</dt>
+    <dd>「<code>.</code>」か「<code>/</code>」で始めてメールボックスのパスを記述し、パスの末尾に「<code>/</code>」を付けない</dd>
+    <dd>例: <code>./Mailbox</code></dd>
+<dt>コマンドの起動 (→「<a href="#command">7.3 コマンドによるメールの処理</a>」)</dt>
+    <dd>行頭に「<code>|</code>」、続けてコマンドラインを記述</dd>
+    <dd>例: <code>|preline vacation fumiya</code></dd>
+<dt>ほかのアドレスへの転送</dt>
+    <dd>行頭に「<code>&amp;</code>」、続けて転送先アドレスを記述</dd>
+    <dd>アドレスが英数字で始まる場合は行頭の「<code>&amp;</code>」は省略可能</dd>
+<!-- COMMENT by fumiya
+実際には、「&」で始まるか、「#」「.」「/」「|」「+」
+で始まっていない行が該当する。
+-->
+    <dd>例: <code>&amp;fumiya@nextstep.example.net</code></dd>
+<!-- COMMENT by fumiya
+<dt>????</dt>
+    <dd>「<code>+</code>」で始まり???? qmail-local.c を参照のこと。(未調査)</dd>
+    <dd>例: <code></code></dd>
+-->
+</dl>
+<p>
+行末のスペースとタブは無視されます。
+しかし、行頭にスペースやタブがあってはいけません。
+空白行を含めることができますが、
+.qmail ファイルの先頭の行を空白行にすることはできません。
+</p>
+
+<h3><a name="basic-address">7.1.3 転送先のアドレスの書式</a></h3>
+<p>
+転送先のアドレスは、
+純粋に「<var>ローカル部</var>@<var>ドメイン部</var>」
+といったアドレスだけを記述します。
+余計なスペースやタブ、括弧類、
+<a href="../resource/rfc/rfc2822.txt">RFC 2822</a>
+で定義されているようなコメントを含めてはいけません。
+また、ドメイン部は FQDN (完全修飾ドメイン名, Fully Qualified Domain Name)
+でなければなりません。
+</p>
+<p>
+転送先のアドレスはアットマーク「@」と以降のドメイン部を省略することができます。
+そのようなアドレスには、
+qmail-send によって「@」と <code>control/envnoathost</code> ファイル
+(なければ <code>control/me</code>) の値が付加されます。
+</p>
+
+<h3><a name="basic-permission">7.1.4 .qmail ファイルとアクセス許可</a></h3>
+<h4>.qmail ファイルが危険なアクセス許可を持つ場合</h4>
+<p>
+.qmail ファイルが誰でも書き込めるようなアクセス許可を持つ場合、
+qmail-local は .qmail ファイルの評価を拒否して一時エラーとします。
+一時エラーとなったメールは、しばらく後に配送を再試行されます。
+</p>
+<!-- COMMENT by fumiya
+コンパイル時に conf-patrn ファイルに指定されていたアクセス許可があると
+拒否する。dot-qmail(5) には「world-writable or group-writable なら
+一時エラー」と記述されているが、qmail-1.03.tar.gz 付属の conf-patr は
+002 なので、標準では world-writable の場合のみ一時エラーとなる。
+-->
+<p>
+.qmail ファイルを所有するユーザーと所有グループは何でも構いません。
+.qmail ファイルが置かれているディレクトリは、
+所有グループとアクセス許可には要件はありません。
+しかし、ディレクトリをほかのユーザーが所有していると一時エラーとなります。
+</p>
+<p>
+例外として、次の節で解説しているように、
+.qmail ファイルの実行アクセス権とディレクトリの
+sticky 属性は特別な意味を持ちます。
+また、
+qmail 付属のマニュアル
+<a href="../resource/man/qmail-users.5.txt">qmail-users(5)</a>
+で解説されているように、
+<code>users/assign</code> ファイルで宛先アドレスに対応するユーザー/ホームディレクトリなどを割り当てた場合は、
+ディレクトリの所有者は誰でも構いません。
+<!-- FIXME: users/assign について解説している章か節があるならそちらに振る -->
+</p>
+<h4>転送以外の配送指定を拒否させる</h4>
+<p>
+.qmail ファイルが所有者の実行アクセス許可を持つ場合、
+qmail-local は転送以外の配送指定の実行を拒否し、
+一時エラーとなります。
+</p>
+<h4>安全に .qmail ファイルを編集する</h4>
+<p>
+ホームディレクトリに sticky 属性が付いている場合、
+.qmail ファイルの有無にかかわらず、
+qmail-local はメールの配送を拒否して一時エラーとします。
+この動作は .qmail ファイルを安全に編集するために利用します。
+</p>
+<p>
+エディタなどで .qmail ファイルを編集して結果を保存する場合、
+保存を実行するプロセスが .qmail ファイルを書き換えている最中にメールが到着し、
+qmail-local コマンドのプロセスが不完全な
+.qmail ファイルが参照してしまう可能性があります。
+これはほんのわずかなタイミングで遭遇する可能性は低いですが、
+完全にゼロではありません。
+</p>
+<p>
+以下にディレクトリの sticky 属性を利用して
+.qmail ファイルを安全に編集する例を示します。
+chmod コマンドで sticky 属性を指定するには、
+シンボルモードでは「t」を用います。
+</p>
+<div>
+.qmail ファイルを安全に編集 (ディレクトリの sticky 属性を利用):
+<pre class="terminal"><code>$ <kbd>cd</kbd>
+$ <kbd>pwd</kbd>
+/home/fumiya
+$ <kbd>chmod +t .</kbd>
+$ <kbd>ls -ld .</kbd>
+drwxr-xr-<em>t</em>   67 fumiya   fumiya      10240 Sep 29 00:01 .
+$ <kbd>vi .qmail</kbd>
+<var>…編集中…</var>
+$ <kbd>chmod -t .qmail</kbd>
+$ <kbd>ls -ld .</kbd>
+drwxr-xr-<em>x</em>   67 fumiya   fumiya      10240 Sep 29 00:03 .
+</code></pre>
+</div>
+<p>
+一時的な作業ファイルを編集し、
+編集が完全に終わったあとに .qmail ファイルに「mv」する方法も安全です。
+ファイル名の変更途中 (rename(2))
+にほかのプロセスに割込まれることはありませんので、
+不完全な .qmail ファイルが表われるタイミングはありません。
+</p>
+<div>
+.qmail ファイルを安全に編集 (一時ファイルを利用):
+<pre class="terminal"><code>$ <kbd>cd</kbd>
+$ <kbd>pwd</kbd>
+/home/fumiya
+$ <kbd>vi .qmail.tmp.$$</kbd>
+<var>…編集中…</var>
+$ <kbd>chmod 644 .qmail.tmp.$$</kbd>
+$ <kbd>mv .qmail.tmp.$$ .qmail</kbd>
+</code></pre>
+</div>
+<!-- COMMENT by fumiya
+ローカル配送をテストする方法。dot-qmail(5) より:
+
+       when you are done!  It's a good  idea  to  test  your  new
+       .qmail file as follows:
+
+            qmail-local -n $USER ~ $USER '' '' '' '' ./Mailbox
+-->
+
+<hr>
+<h2><a name="extension">7.2 拡張メールアドレス</a></h2>
+<p>
+qmail が稼働しているシステムで自分宛のメールを受け取っているユーザーは、
+自分のユーザー名に続けてハイフン「-」
+と任意の文字列を足したものをローカル部に持つ
+「拡張メールアドレス」を利用することができます。
+例えば、
+yoursite.example.com ドメインのユーザー carol は、
+「carol@yoursite.example.com」のほかに
+「carol-<var>anything</var>@yoursite.example.com」
+いったアドレスでも受け取れます。
+</p>
+<p>
+拡張アドレスは好きな数だけ用意することができます。
+ハイフン以降の「<var>anything</var>」の部分は、
+メールアドレスのローカル部に含めることができる文字であれば、
+どんなものでも構いません。
+ただしこの後の節で解説しているように、
+末尾が「-default」、「-owner」となっているアドレスは特殊です。
+</p>
+<h3><a name="extension-make">7.2.1 拡張メールアドレスを用意する</a></h3>
+<p>
+拡張メールアドレスを用意するには、ホームディレクトリに
+「.qmail-<var>拡張名</var>」という名前の特別な .qmail ファイルを作成します。
+例えば、ユーザー bob がホームディレクトリに「.qmail-test」という名前の
+.qmail ファイルを作成すると、
+「bob-test@<var>ドメイン部</var>」
+というアドレス宛のメールを受け取れるようになります。
+</p>
+<p>
+拡張メールアドレス用の .qmail ファイルの書式は、
+通常の .qmail ファイルとまったく同じです。
+</p>
+<div>
+ユーザー bob の拡張メールアドレス「bob-test」を用意する:
+<pre class="terminal"><code>$ <kbd>cd</kbd>
+$ <kbd>pwd</kbd>
+/home/bob
+$ <kbd>touch .qmail-test</kbd>
+$ <kbd>chmod 644 .qmail-test</kbd>
+</code></pre>
+</div>
+<p>
+拡張メールアドレスの拡張名部分に大文字が含まれる場合、
+対応する .qmail ファイルは、
+すべての大文字を小文字に変換した名前になります。
+拡張メールアドレスの拡張名部分にドット「.」が含まれる場合、
+対応する .qmail ファイルは、
+すべてのドット「.」をコロン「:」に変換した名前になります。
+</p>
+<!-- FIXME: 理由も書くべきか -->
+<ul>
+    <li>carol-FooBar → .qmail-foobar</li>
+    <li>carol-hoge.net → .qmail-hoge:net</li>
+</ul>
+<h3><a name="extension-wildcard">7.2.2 ワイルドカードアドレス</a></h3>
+<p>
+ファイル名の末尾が「-defualt」になっている .qmail ファイルを用意すると、
+ワイルドカードアドレスとして機能します。
+例えば、「.qmail-default」という名前の .qmail ファイルを持つユーザー carol は、
+宛先アドレスのローカル部が「carol-」で始まっているのメールなら、
+すべて受け取ることができます。
+ただし、対応する名前を持つ .qmail ファイルがあるなら、
+そちらの指示に従って配送されます。
+</p>
+<p>
+ユーザー carol の拡張メールアドレスが、
+どのような順番で .qmail ファイルを検索し配送するかを見てみましょう。
+以下のように、
+最初は対応する名前の .qmail ファイルそのものを参照し、
+なければ最後のハイフン「-」以降を「-default」にした
+.qmail ファイルを参照します。
+</p>
+<dl>
+<dt>宛先が carol-foo@<var>ドメイン部</var> の場合</dt>
+    <dd>
+    <ol>
+	<li>.qmail-foo があるなら、その指示に従い配送</li>
+	<li>.qmail-default があるなら、その指示に従い配送</li>
+	<li>対応する .qmail ファイルがないのでバウンス</li>
+    </ol>
+    </dd>
+<dt>宛先が carol-foo-bar@<var>ドメイン部</var> の場合</dt>
+    <dd>
+    <ol>
+	<li>.qmail-foo-bar があるなら、その指示に従い配送</li>
+	<li>.qmail-foo-default があるなら、その指示に従い配送</li>
+	<li>.qmail-default があるなら、その指示に従い配送</li>
+	<li>対応する .qmail ファイルがないのでバウンス</li>
+    </ol>
+    </dd>
+<dt>宛先が carol-foo-bar-hoge@<var>ドメイン部</var> の場合</dt>
+    <dd>
+    <ol>
+	<li>.qmail-foo-bar-hoge があるなら、その指示に従い配送</li>
+	<li>.qmail-foo-bar-default があるなら、その指示に従い配送</li>
+	<li>.qmail-foo-default があるなら、その指示に従い配送</li>
+	<li>.qmail-default があるなら、その指示に従い配送</li>
+	<li>対応する .qmail ファイルがないのでバウンス</li>
+    </ol>
+    </dd>
+</dl>
+<h3><a name="extension-owner">7.2.3 転送時の送信者アドレスの変更</a></h3>
+<p>
+通常 qmail-local は、
+メールの転送を行なうとき、
+送信者アドレスはそのままにして転送先アドレスに送信します。
+これは、「.qmail-<var>拡張名</var>-owner」という名前の
+.qmail ファイルを用意することで、
+メーリングリストマネージャーのように、
+転送時に送信者アドレスを置き換えることができます。
+</p>
+<p>
+さらに「.qmail-<var>拡張名</var>-owner-default」という名前の
+.qmail ファイルも存在すると、
+qmail-local は qmail 特有の VERP (Variable Envelope Return Paths)
+機能を利用してメールを送信します。
+これにより、送信者アドレスは転送先ごとに異なるアドレスとなります。
+</p>
+<p>
+Bob (bob@example.net) から
+Carol の拡張アドレス carol-foo@hoge.example.com 宛に送信されたメールが
+<code>~carol/.qmail-foo</code> ファイル内の指示により転送されるとき、
+送信者アドレスがどのようになるかを見てみましょう。
+</p>
+<dl>
+<dt>.qmail-foo-owner が存在しない場合</dt>
+    <dd>bob@example.net (元のまま)</dd>
+<dt>.qmail-foo-owner が存在する場合</dt>
+    <dd>carol-foo-owner@hoge.example.com</dd>
+<dt>.qmail-foo-owner, .qmail-foo-owner-default の両方が存在する場合</dt>
+    <dd>carol-foo-owner-<var>転送先ローカル部</var>=<var>転送先ドメイン部</var>@hoge.example.com</dd>
+</dl>
+<p>
+送信者アドレスの置き換えにより、
+転送したメールがバウンスしたときの差し戻し先は、
+Bob でなく Carol 宛になります。
+</p>
+<p>
+送付されたメールがバウンス通知メールの場合は、
+送信者アドレスの置き換えは実行されません。
+(元の送信者アドレスが空もしくは「<code>#@[]</code>」の場合)
+</p>
+
+<hr>
+<h2><a name="command">7.3 コマンドによるメールの処理</a></h2>
+<h3><a name="command-interface">7.3.1 どのようにしてコマンドが起動されるのか</a></h3>
+<p>
+この節では
+qmail 付属のマニュアル
+<a href="../resource/man/dot-qmail.5.txt">dot-qmail(5)</a>,
+<a href="../resource/man/qmail-command.8.txt">qmail-command(8)</a>
+の内容と実際の動作を元に解説します。
+</p>
+<h4>コマンドの起動から終了までの流れ</h4>
+<p>
+.qmail ファイルで指定されたコマンドは、
+次のような手順で実行されます。
+</p>
+<ol>
+    <li>実効権限をユーザーの権限に変更</li>
+    <li>ユーザーのホームディレクトリに移動</li>
+    <li>配送に関する各種情報を環境変数を設定</li>
+    <li>コマンド実行用の子プロセスを生成</li>
+    <li>子プロセスはシェルを利用してコマンドを起動</li>
+    <li>コマンドは標準入力からメールのメッセージを受け取り処理する</li>
+    <li>親プロセスはコマンドの終了コードを見る</li>
+</ol>
+<p>
+1. は qmail-lspawn が、
+2.〜5., 7. は qmail-local が実行します。
+1.〜3. は、評価する .qmail ファイルを決定して配送処理を始める前に
+1度だけ実行されます。
+4. 以降はコマンドの起動指示ごとに実行されます。
+</p>
+<p>
+コマンドは、
+シェル /bin/sh の -c オプションを介して起動されます。
+よって、.qmail ファイル内のコマンド起動の指定には、
+シェルスクリプトを記述することができます。
+ただしスクリプトは .qmail ファイルの書式に従い、
+1行で記述しなければなりません。
+</p>
+<h4>メールの受け渡し</h4>
+<p>
+起動されたコマンドは、
+処理すべきメールのメッセージを標準入力から取得します。
+必要がなければ読み込まなくても構いません。
+</p>
+<p>
+qmail-local は、
+.qmail ファイルに記述されている各配送指定に従いメールを別プロセスに渡すとき、
+同一のファイル記述子を使い回します。
+このため、
+コマンドから子プロセスを生成するなどしてバックグラウンドでメールを読み込ませると、
+ほかのプロセスと競合する可能性があります。
+</p>
+<p>
+sendmail とは違い、
+メールの先頭に「From <var>送信者アドレス</var> <var>タイムスタンプ</var>」
+という行は付加されていません。
+また、送信者アドレスを含む Return-Path: フィールド、
+現段階での最終的な配送先アドレスを示す Delivered-To: フィールドも付きません。
+これらはそれぞれ環境変数
+<code>UFLINE</code>, <code>RPLINE</code>, <code>DTLINE</code>
+を介して渡されます。
+コマンドは必要に応じてこれら環境変数の値をメールに追加します。
+</p>
+<h4>環境変数</h4>
+<p>
+qmail は環境変数を利用して配送に関する情報をコマンドに渡します。
+sendmail の .forward ファイルから起動されるコマンドのように、
+メールのヘッダー部を解析する必要はありません。
+</p>
+<p>
+以下に qmail-local により設定される環境変数の一覧を挙げます。
+値の例は、送信者アドレスが bob@from.example.net、
+宛先アドレスが carol-foo-bar@to.example.com、
+配送先のローカルユーザーが carol であるときの値です。
+</p>
+<table>
+<caption>qmail-local が設定する環境変数と取り得る値の例:</caption>
+<tbody>
+<tr><th class="header" colspan="3">送信者アドレス関連</th></tr>
+<tr>
+    <th>変数名</th>
+    <th>意味</th>
+    <th>値の例 (備考、条件など)</th>
+</tr>
+<tr>
+    <th><code>SENDER</code></th>
+    <td>送信者アドレス</td>
+    <td><code>bob@from.example.net</code></td>
+</tr>
+<tr>
+    <th rowspan="2"><code>NEWSENDER</code></th>
+    <td rowspan="2">転送時に用いるべき送信者アドレス<br>
+	通常は <code>SENDER</code> と同じ値。
+	.qmail-<var>拡張名</var>-owner ファイルの存在によって置き換る。
+	(→「<a href="#extension-owner">7.2.3 転送時の送信者アドレスの変更</a>」)
+    </td>
+    <td><code>bob@from.example.net</code> (.qmail-foo-bar-owner が存在しない場合)</td>
+</tr>
+<tr>
+    <td><code>carol-foo-bar-owner@to.example.com</code> (.qmail-foo-bar-owner が存在する場合)</td>
+</tr>
+<tr><th class="header" colspan="3">宛先アドレス関連</th></tr>
+<tr>
+    <th>変数名</th>
+    <th>値の意味</th>
+    <th>値の例 (備考、条件など)</th>
+</tr>
+<tr>
+    <th><code>RECIPIENT</code></th>
+    <td>宛先アドレス</td>
+    <td><code>carol-foo-bar@to.example.com</code></td>
+</tr>
+<tr>
+    <th><code>LOCAL</code></th>
+    <td>宛先アドレスのローカル部</td>
+    <td><code>carol-foo-bar</code></td>
+</tr>
+<tr>
+    <th><code>EXT</code></th>
+    <td>宛先アドレスの拡張名の部分</td>
+    <td><code>foo-bar</code></td>
+</tr>
+<tr>
+    <th><code>EXT2</code></th>
+    <td><code>EXT</code> の値の最初のハイフン「-」までを取り除いたもの</td>
+    <td><code>bar</code></td>
+</tr>
+<tr>
+    <th><code>EXT3</code></th>
+    <td><code>EXT</code> の値の 2番目のハイフン「-」までを取り除いたもの</td>
+    <td><code></code> (空白)</td>
+</tr>
+<tr>
+    <th><code>EXT4</code></th>
+    <td><code>EXT</code> の値の 3番目のハイフン「-」までを取り除いたもの</td>
+    <td><code></code> (空白)</td>
+</tr>
+<tr>
+    <th><code>HOST</code></th>
+    <td>宛先アドレスのドメイン部</td>
+    <td><code>to.example.com</code></td>
+</tr>
+<tr>
+    <th><code>HOST2</code></th>
+    <td><code>HOST</code> の値の最後のドット「.」以降を取り除いたもの</td>
+    <td><code>to.example</code></td>
+</tr>
+<tr>
+    <th><code>HOST3</code></th>
+    <td><code>HOST</code> の値の最後から 2番目のドット「.」以降を取り除いたもの</td>
+    <td><code>to</code></td>
+</tr>
+<tr>
+    <th><code>HOST4</code></th>
+    <td><code>HOST</code> の値の最後から 3番目のドット「.」以降を取り除いたもの</td>
+    <td><code>to</code></td>
+</tr>
+
+<tr><th class="header" colspan="3">配送先のローカルユーザーと .qmail ファイル関連</th></tr>
+<tr>
+    <th>変数名</th>
+    <th>値の意味</th>
+    <th>値の例 (備考、条件など)</th>
+</tr>
+<tr>
+    <th><code>USER</code></th>
+    <td>配送先のユーザーのログイン名</td>
+    <td><code>carol</code></td>
+</tr>
+<tr>
+    <th><code>HOME</code></th>
+    <td><code>USER</code> のホームディレクトリ</td>
+    <td><code>/home/carol</code></td>
+</tr>
+<tr>
+    <th rowspan="3"><code>DEFAULT</code></th>
+    <td rowspan="3">ファイル名が「-default」で終わる
+	.qmail ファイルを評価したときの「default」部分の実際の名前
+    </td>
+    <td>未定義 (.qmail-foo-bar を評価した場合)</td>
+</tr>
+<tr>
+    <td><code>bar</code> (.qmail-foo-default を評価した場合)</td>
+</tr>
+<tr>
+    <td><code>foo-bar</code> (.qmail-default を評価した場合)</td>
+</tr>
+
+<tr><th class="header" colspan="3">ヘッダー関連</th></tr>
+<tr>
+    <th>変数名</th>
+    <th>値の意味</th>
+    <th>値の例 (備考、条件など)</th>
+</tr>
+<tr>
+    <th><code>UFLINE</code></th>
+    <td>mbox 形式メールボックスでメールメッセージの先頭に付ける
+	「From 送信者アドレス タイムスタンプ」行
+    </td>
+    <td><code>From bob@from.example.net Mon Oct 01 21:56:18 2001</code> + 改行</td>
+</tr>
+<tr>
+    <th><code>RPLINE</code></th>
+    <td>Return-Path: フィールド</td>
+    <td><code>Return-Path: &lt;bob@from.example.net&gt;</code> + 改行</td>
+</tr>
+<tr>
+    <th><code>DTLINE</code></th>
+    <td>Delivered-To: フィールド</td>
+    <td><code>Delivered-To: carol-foo-bar@to.example.com</code> + 改行</td>
+</tr>
+</tbody>
+</table>
+<!-- COMMENT by fumiya
+環境変数を利用することの利点を解説したい。
+    + コマンドはメールメッセージのヘッダー部を解析する必要がない。(既出)
+    + コマンドラインで置換マクロを介して渡す方法は危険
+    + そのほか?
+
+以下の WARNING も触れるべき? qmail-command(8) より:
+       qmail-local supplies several useful environment  variables
+       to  command.  WARNING: These environment variables are not
+       quoted.  They may contain special  characters.   They  are
+       under the control of a possibly malicious remote user.
+-->
+
+<h4>コマンドの終了コードの評価</h4>
+<p>
+qmail-local は実行したコマンドの終了コードを評価して、
+配送の正否の判定と以降の配送指定を実行するかどうかを決定します。
+終了コードは以下のように分類されます。
+</p>
+<dl>
+<dt>0</dt>
+    <dd>配送の成功を示す</dd>
+    <dd>これ以降に配送指定があるなら続けて評価・実行する</dd>
+<dt>99</dt>
+    <dd>配送の成功を示す</dd>
+    <dd>ただし、これ以降の配送指定は実行しない</dd>
+<dt>100</dt>
+    <dd>配送の永続的な失敗を示す</dd>
+    <dd>メールは即時にバウンスされる</dd>
+    <dd>これ以降の配送指定は実行しない</dd>
+<dt>111</dt>
+    <dd>配送の一時的な失敗を示す</dd>
+    <dd>メールはキューに残り、後ほど再試行される</dd>
+    <dd>これ以降の配送指定は実行しない</dd>
+<dt>64, 65, 76, 77, 78 または 112</dt>
+    <dd>現在のところ 100 と同じ意味 (永続的エラー)</dd>
+    <dd>コマンドはこれらの値は使用しないようにすべきである</dd>
+<dt>そのほかの値</dt>
+    <dd>現在のところ 111 と同じ意味 (一時的エラー)</dd>
+    <dd>コマンドはこれらの値は使用しないようにすべきである</dd>
+</dl>
+<h4>.forward 用コマンドとの終了コードの違い</h4>
+<p>
+ドキュメントなどに記述がないため確証はありませんが、
+<a href="../resource/man/qmail-command.8.txt">qmail-command(8)</a>
+にて定義されている 64 から 78 までの値と「そのほか」の値の終了コードは、
+ヘッダーファイル <code>/usr/include/sysexits.h</code>
+で定義されている定数を元に割り当てられたものと思われます。
+このヘッダーファイルは、
+システムコマンドが使用すべき終了コードとその意味を定義しています。
+</p>
+<p>
+FreeBSD 4.3 の同ヘッダーファイルを見ると、
+次のような定数が定義されいるのがわかります。
+多少の違いがあるものの、
+FreeBSD 以外のほかのシステムでも同じ名前、同じ値、
+同じ意味の定数が定義されています。
+</p>
+<div>
+<code>/usr/include/sysexits.h</code> で定義されている定数 (FreeBSD 4.3):
+<pre class="code"><code>#define EX_OK           0       /* successful termination */
+
+#define EX__BASE       64 /* base value for error messages */
+
+#define EX_USAGE       64 /* command line usage error */
+#define EX_DATAERR     65 /* data format error */
+#define EX_NOINPUT     66 /* cannot open input */
+#define EX_NOUSER      67 /* addressee unknown */
+#define EX_NOHOST      68 /* host name unknown */
+#define EX_UNAVAILABLE 69 /* service unavailable */
+#define EX_SOFTWARE    70 /* internal software error */
+#define EX_OSERR       71 /* system error (e.g., can't fork) */
+#define EX_OSFILE      72 /* critical OS file missing */
+#define EX_CANTCREAT   73 /* can't create (user) output file */
+#define EX_IOERR       74 /* input/output error */
+#define EX_TEMPFAIL    75 /* temp failure; user is invited to retry */
+#define EX_PROTOCOL    76 /* remote error in protocol */
+#define EX_NOPERM      77 /* permission denied */
+#define EX_CONFIG      78 /* configuration error */
+
+#define EX__MAX 78     /* maximum listed value */
+</code></pre>
+</div>
+<p>
+qmail の .qmail ファイル向けのコマンドは終了コードとして
+0 か 99〜111 を返すようになっていますが、
+sendmail の .forward ファイルからの利用を想定しているコマンドは、
+<code>sysexits.h</code> の <code>EX_<var>XXXX</var></code> 定数で定義されている 0 か
+66〜78 の値 (システムにより多少異なる) を返します。
+このため、.forward 用に作成されたメール処理コマンドを .qmail で利用するには、
+本来ならば、
+終了コードを qmail-local 向けに変換するラッパーを介する必要があります。
+しかし、qmail-local は sysexits.h の終了コードも想定している (と思われる) ため、
+ほとんどの場合そのまま流用できます。
+</p>
+<!-- COMMENT by fumiya
+qmail-procmail の例を示すべき?
+改訂版対応。
+-->
+
+<h3><a name="command-qmail">7.3.2 qmail 付属の .qmail 用コマンド</a></h3>
+<p>
+qmail には .qmail ファイルで利用できるコマンドがいくつか用意されています。
+ここで簡単に紹介します。
+それぞれマニュアルが用意されていますので、
+詳細はそちらを参照してください。
+</p>
+<h4>メールの転送 - forward</h4>
+<p>
+forward コマンドは、
+指定されたアドレスにメールを転送します。
+送信者アドレスは環境変数 <code>NEWSENDER</code> の値となります。
+</p>
+<dl>
+<dt>書式</dt>
+    <dd><code>|forward <var>address</var> ...</code></dd>
+<dt>引数</dt>
+    <dd>
+    <dl>
+	<dt><var>address</var></dt>
+	    <dd class="none">
+	    転送先のアドレスを 1つ以上指定する
+	    </dd>
+    </dl>
+    </dd>
+</dl>
+<p>
+「&amp;<var>宛先アドレス</var>」と変わりないじゃないかという話もありますが、
+宛先アドレスを動的に生成したいときに有用です。
+</p>
+<div>
+同じドメインのユーザー david にコピーを転送 (.qmail):
+<pre class="code"><code>|forward &quot;david-$RECIPIENT&quot;
+./Maildir/
+</code></pre>
+</div>
+<h4>条件によりメールを転送 - condredirect</h4>
+<p>
+condredirect は条件付きの転送処理コマンドです。
+引数に指定されたコマンドを起動し、
+その終了コードが 0 ならばメールを転送します。
+</p>
+<p>
+condredirect により起動されたコマンドは、
+標準入力からメールを読み込むことができます。
+必要ならばメール本文や環境変数の値を参照し、
+条件に合うかどうかの判定の材料にします。
+</p>
+<dl>
+<dt>書式</dt>
+    <dd><code>|condredirect <var>address</var> <var>command</var> [<var>arg</var> ...]</code></dd>
+<dt>引数</dt>
+    <dd>
+    <dl>
+	<dt><var>address</var></dt>
+	    <dd class="none">
+	    転送先のアドレス
+	    </dd>
+	<dt><var>command</var></dt>
+	    <dd class="none">起動するコマンド</dd>
+	<dt><var>arg</var></dt>
+	    <dd class="none">コマンド <var>command</var> に与える引数</dd>
+    </dl>
+    </dd>
+<dt>コマンド <var>command</var> の終了コードと動作</dt>
+    <dd>
+    <dl>
+	<dt>0</dt>
+	    <dd class="none">
+	    指定されたアドレスにメールを転送し、終了コード 99 を返す。
+	    以降の配送指定は実行されない。
+	    </dd>
+	<dt>111</dt>
+	    <dd class="none">
+	    転送は行わず、終了コード 111 を返す。
+	    配送は一時エラーとなり、後ほど再試行される。
+	    </dd>
+	<dt>そのほかの値、またはコマンドが存在しない場合</dt>
+	    <dd class="none">
+	    転送は行わず、終了コード 0 を返す。
+	    続けて以降の配送指定が実行される。
+	    </dd>
+    </dl>
+    </dd>
+</dl>
+<div>
+宛先のドメイン部が「info.example.com」の場合は別のアドレスに転送 (.qmail):
+<pre class="code"><code>|condredirect carol-info@example.com [ &quot;$HOST&quot; = &quot;info.exmaple.com&quot; ]
+./Maildir/
+</code></pre>
+※ 条件が合致すると condredirect はメールを転送して 99 を返すため、
+続く <code>./Maildir/</code> への配送は実行されない。
+</div>
+<h4>条件によりメールをバウンス - bouncesaying</h4>
+<p>
+bouncesaying は条件付きのバウンス処理コマンドです。
+引数に指定されたコマンドを起動し、
+その終了コードが 0 ならばメールをバウンスします。
+コマンドの指定を省略すると、無条件でメールをバウンスします。
+</p>
+<p>
+bouncesaying 自身は、ほとんどなにも処理をしません。
+バウンスさせる場合は終了コード 100 を返すことで、
+qmail-local にバウンス処理を実行させます。
+</p>
+<dl>
+<dt>書式</dt>
+    <dd><code>|bouncesaying <var>message</var> [<var>command</var> [<var>arg</var> ...]]</code></dd>
+<dt>引数</dt>
+    <dd>
+    <dl>
+	<dt><var>message</var></dt>
+	    <dd class="none">バウンス通知メールに含めるメッセージ</dd>
+	<dt><var>command</var></dt>
+	    <dd class="none">起動するコマンド</dd>
+	<dt><var>arg</var></dt>
+	    <dd class="none">コマンド <var>command</var> に与える引数</dd>
+    </dl>
+    </dd>
+<dt>コマンド <var>command</var> の終了コードと動作</dt>
+    <dd>
+    <dl>
+	<dt>0、またはコマンドが存在しない場合</dt>
+	    <dd class="none">
+	    終了コード 100 を返すことで、メールをバウンスさせる。
+	    以降の配送指定は実行されない。
+	    </dd>
+	<dt>111、またはコマンドの起動が一時エラーで失敗した場合</dt>
+	    <dd class="none">
+	    終了コード 111 を返すことで、一時エラーとする。
+	    メールの配送は後ほど再試行される。
+	    </dd>
+	<dt>そのほかの値</dt>
+	    <dd class="none">
+	    終了コード 0 を返す。
+	    続けて以降の配送指定が実行される。
+	    </dd>
+    </dl>
+    </dd>
+</dl>
+<div>
+退職した人宛のメールをバウンスさせるとともに理由も伝える (.qmail):
+<pre class="code"><code>|bouncesaying 'Mr. David retired in February.'
+</code></pre>
+</div>
+<h4>条件の反転 - except</h4>
+<p>
+except コマンドは、
+起動したコマンドの終了コードを得て、
+その意味を反転させて終了コードを返します。
+単独でも利用できますが、
+condredirect, bouncesaying と組み合わせても利用できます。
+</p>
+<dl>
+<dt>書式</dt>
+    <dd><code>|except <var>command</var> [<var>arg</var> ...]</code></dd>
+<dt>引数</dt>
+    <dd>
+    <dl>
+	<dt><var>command</var></dt>
+	    <dd class="none">起動するコマンド</dd>
+	<dt><var>arg</var></dt>
+	    <dd class="none">コマンド <var>command</var> に与える引数</dd>
+    </dl>
+    </dd>
+<dt>コマンド <var>command</var> の終了コードと動作</dt>
+    <dd>
+    <dl>
+	<dt>0、またはコマンドが存在しない場合</dt>
+	    <dd class="none">
+	    終了コード 100 を返す。
+	    </dd>
+	<dt>111、またはコマンドの起動が一時エラーで失敗した場合</dt>
+	    <dd class="none">
+	    終了コード 111 を返す。
+	    </dd>
+	<dt>そのほかの値</dt>
+	    <dd class="none">
+	    終了コード 0 を返す。
+	    </dd>
+    </dl>
+    </dd>
+</dl>
+<div>
+Bcc で送付されたメールをバウンスする (.qmail):
+<pre class="code"><code>|bouncesaying 'I do not accept Bcc.' except iftocc
+./Maildir/
+</code></pre>
+※ iftocc は次節で紹介する mess822 コマンドライブラリに含まれているコマンドで、
+環境変数 <code>RECIPIENT</code> で示される宛先アドレスがメールの
+To:/Cc: フィールドに含まれていると 0 を、含まれていなければ 100 を返す。
+</div>
+<h4>配送完了を送信者に通知 - qreceipt</h4>
+<p>
+qreceipt コマンドは、
+メールが無事到着したことを通知するメールを送信者アドレスに送付します。
+この通知を必要とする送信者は、
+メールの Notice-Requested-Upon-Delivery-To:
+フィールドに宛先のアドレスを含めなければなりません。
+</p>
+<p>
+Notice-Requested-Upon-Delivery-To: フィールドは、
+D. J. Bernstein 氏が提唱している独自のヘッダーフィールドです。
+<a href="../resource/rfc/rfc2298.txt">RFC 2298</a>
+「An Extensible Message Format for Message Disposition Notifications」
+で定義しているメッセージ到達通知の仕組みとは異なるものです。
+</p>
+<dl>
+<dt>Notice-Requested-Upon-Delivery-To: フィールドの定義</dt>
+    <dd><a href="http://cr.yp.to/proto/nrudt.txt">http://cr.yp.to/proto/nrudt.txt</a></dd>
+</dl>
+<p>
+この文書は過去に IETF
+(The Internet Engineering Task Force,
+<a href="http://www.ietf.org">http://www.ietf.org</a>)
+のインターネットドラフトとして公開されていましたが、
+現在は期限切れで削除されています。
+残念ながら RFC にはなっていません。
+</p>
+<dl>
+<dt>書式</dt>
+    <dd><code>|qreceipt <var>youraddress</var></code></dd>
+<dt>引数</dt>
+    <dd>
+    <dl>
+	<dt><var>youraddress</var></dt>
+	    <dd class="none">
+	    Notice-Requested-Upon-Delivery-To: フィールドに
+	    <var>youraddress</var>
+	    が含まれている場合に到達通知メールを送信する
+	    </dd>
+    </dl>
+    </dd>
+</dl>
+<div>
+Notice-Requested-Upon-Delivery-To: フィールドによる到達通知要求に応答させる (.qmail):
+<pre class="code"><code>./Maildir/
+|qreceipt alice@yoursite.example.com
+</code></pre>
+</div>
+<h4>メールの到着をユーザーに通知 - qbiff</h4>
+<p>
+qbiff コマンドを .qmail ファイルに組み込むことで、
+メールの到着をユーザーの端末に通知することができます。
+qbiff コマンドには必要な引数はありません。
+</p>
+<div>
+メールの到着を自分の端末に通知させる (.qmail):
+<pre class="code"><code>./Maildir/
+|qbiff
+</code></pre>
+</div>
+<p>
+qbiff コマンドによる通知を受けるには、
+biff コマンドで通知の仕組みを有効にしなければなりません。
+ログインしたあとに、<code>biff y</code> と実行してください。
+biff コマンドを引数なしで実行して
+「<code>is y</code>」と表示されれば有効になっています。
+</p>
+<div>
+biff によるメール到着通知を有効にする:
+<pre class="terminal"><code>$ <kbd>biff</kbd>
+is n
+$ <kbd>biff y</kbd>
+$ <kbd>biff</kbd>
+is y
+</code></pre>
+</div>
+
+<h4>.forward 用コマンドの利用 - preline</h4>
+<p>
+preline は、
+sendmail の .forward ファイルでの利用を想定しているコマンドを
+.qmail ファイルで利用するためのラッパーコマンドです。
+</p>
+<p>
+.forward ファイル向けに作成された旧来のコマンド群は、
+qmail-local が設定する環境変数を関知することができません。
+preline は、
+qmail-local が設定した環境変数
+<code>UFLINE</code>, <code>RPLINE</code>, <code>DTLINE</code>
+の値をメールに付け足し、
+.forward 用コマンドが想定するメールの形式にします。
+</p>
+<dl>
+<dt>書式</dt>
+    <dd><code>|preline [-frd] <var>command</var> [<var>arg</var> ...]</code></dd>
+<dt>オプション</dt>
+    <dd>
+    <dl>
+	<dt>-f</dt>
+	    <dd class="none">
+	    メールの先頭に環境変数 <code>UFLINE</code>
+	    の値を付け足さないようにする
+	    </dd>
+	<dt>-r</dt>
+	    <dd class="none">
+	    メールのヘッダー部に環境変数 <code>RPLINE</code>
+	    の値を付け足さないようにする
+	    </dd>
+	<dt>-d</dt>
+	    <dd class="none">
+	    メールのヘッダー部に環境変数 <code>DTLINE</code>
+	    の値を付け足さないようにする
+	    </dd>
+    </dl>
+    </dd>
+<dt>引数</dt>
+    <dd>
+    <dl>
+	<dt><var>command</var></dt>
+	    <dd class="none">メールを処理するために起動するコマンド</dd>
+	<dt><var>arg</var></dt>
+	    <dd class="none">コマンド <var>command</var> に与える引数</dd>
+    </dl>
+    </dd>
+</dl>
+<div>
+.qmail ファイルで vacation コマンドを利用する (.qmail):
+<pre class="code"><code>|preline vacation carol
+</code></pre>
+</div>
+
+<h3><a name="command-misc">7.3.3 .qmail でのコマンド処理に役立つソフトウェア</a></h3>
+<p>
+ここでは、
+.qmail ファイルで有用なコマンドを含むソフトウェアパッケージを簡単に紹介します。
+それらは .qmail ファイルに限らず、
+ほか場面でメールのメッセージを操作したいときにも便利です。
+</p>
+<h4>メールメッセージの解析 - mess822</h4>
+<p>
+mess822 は、
+メールのメッセージの解析を行なうためのライブラリと、
+それを利用して実装されたコマンドを含むソフトウェアです。
+mess822 は、qmail と同じく D. J. Bernstein 氏による作品です。
+名前に含まれる「822」とは、
+インターネットメールのメッセージ形式を定義している
+<a href="../resource/rfc/rfc822.txt">RFC 822</a>
+(「Standard for ARPA Internet Text Messages」、
+<a href="../resource/rfc/rfc2822.txt">RFC 2822</a> で置き換えられた)
+のことを指します。
+</p>
+<dl>
+<dt>mess822 の Web サイト</dt>
+    <dd><a href="http://cr.yp.to/mess822.html">http://cr.yp.to/mess822.html</a></dd>
+</dl>
+<p>
+mess822 に含まれているコマンドを簡単に紹介します。
+</p>
+<dl>
+<dt>iftocc</dt>
+    <dd>
+    環境変数 <code>RECIPIENT</code> または引数で指定されたアドレスが
+    To:/Cc: フィールドに含まれているか検査する。
+    比較の際、大文字/小文字は同一視される。
+    </dd>
+    <dd>
+    終了コードとしてアドレスが含まれていれば 0、
+    そうでなければ 100 を返す。
+    </dd>
+<dt>822header</dt>
+    <dd>メールのヘッダー部分だけを表示する。</dd>
+<dt>822field</dt>
+    <dd>Subject: または指定されたヘッダーフィールドの内容を表示する。</dd>
+    <dd>
+    終了コードとして該当するヘッダーフィールドが含まれていれば 0、
+    含まれていなければ 100 を返す。
+    </dd>
+<dt>822date</dt>
+    <dd>
+    Date: または指定されたヘッダーフィールドに含まれる日付を表す文字列を解析し、
+    3つの形式で表示する。
+    </dd>
+<dt>822received</dt>
+    <dd>Received: フィールドの内容を整形して表示する。</dd>
+<dt>822print</dt>
+    <dd>メールを整形して表示する。</dd>
+<dt>new-inject</dt>
+    <dd>
+    メールのヘッダー部分の書き換え機能を有するメールクライアント。
+    qmail-inject の別バージョン。
+    </dd>
+<dt>ofmipd</dt>
+    <dd>
+    SMTP と同等の OFMIP (Old-Fashioned Mail Injection Protocol)
+    経由でメールを受け取り、ヘッダー部分を書き換えて配送する OFMIP デーモン。
+    </dd>
+    <dd>OFMIP については
+    <a href="http://cr.yp.to/proto/ofmip.html">http://cr.yp.to/proto/ofmip.html</a>
+    を参照のこと。
+    </dd>
+</dl>
+
+<h4>qmail 用の作成されたユーティリティ - qtools</h4>
+<p>
+qtools は、
+qmail 環境で使用するためのユーティリティコマンド群です。
+.qmail ファイルでの使用を想定しています。
+qtools には、
+mess822 のコマンドに似た名前のコマンドが 10 種類以上も含まれています。
+</p>
+<dl>
+<dt>qtools の Web サイト</dt>
+    <dd><a href="http://www.superscript.com/qtools/intro.html">http://www.superscript.com/qtools/intro.html</a></dd>
+</dl>
+<!-- COMMENT by fumiya
+<h4>ファイルへの出力を安全に行うコマンド - safecat</h4>
+<p>
+safecat は、qmail-local が
+maildir 形式のメールボックスにメールを保存するときの手順に習い、
+安全なファイルへの出力を実現するコマンドです。
+</p>
+<dl>
+<dt>safecat の Web サイト</dt>
+    <dd><a href="http://www.nb.net/~lbudney/linux/software/safecat.html">http://www.nb.net/~lbudney/linux/software/safecat.html</a></dd>
+</dl>
+-->
+<!-- COMMENT by fumiya
+改訂版対応?
+<p>
+mess822 は、qmail と同じく D. J. Bernstein 氏による作品です。
+</p>
+<dl>
+<dt>mess822 の Web サイト</dt>
+    <dd><a href="http://cr.yp.to/mess822.html">http://cr.yp.to/mess822.html</a></dd>
+</dl>
+<h4>mess822 のインストール</h4>
+<p>
+mess822 のコンパイルとインストールの手順は qmail とほぼ同様です。
+実行バイナリとマニュアルは qmail と違い
+<code>/usr/local</code> 以下にインストールされます。
+ただし、
+new-inject コマンドと ofmipd デーモンは
+<code>/var/qmail/bin</code> にインストールされます。
+</p>
+<dl>
+<dt>mess822 のソースの所在</dt>
+    <dd><a href="http://cr.yp.to/software/mess822-0.58.tar.gz">http://cr.yp.to/software/mess822-0.58.tar.gz</a></dd>
+    <dd><a href="ftp://ftp.jp.qmail.org/qmail/mess822-0.58.tar.gz">ftp://ftp.jp.qmail.org/qmail/mess822-0.58.tar.gz</a> (ミラー)</dd>
+</dl>
+<div>
+mess822 のコンパイルとインストール:
+<pre class="terminal"><code>$ <kbd>gzip -dc mess822-0.58.tar.gz | tar xf -</kbd>
+$ <kbd>cd mess822-0.58</kbd>
+$ <kbd>make it install instcheck 2&gt;&amp;1| tee make.out</kbd>
+<var>… バイナリなどのコンパイル状況 …</var>
+$ <kbd>su</kbd>
+Password: <kbd><var>root のパスワード</var></kbd>
+# <kbd>make setup</kbd>
+./install
+# <kbd>make check</kbd>
+./instcheck
+</code></pre>
+</div>
+<h4>mess822 の各種バイナリ/ソースパッケージ</h4>
+<dl>
+<dt>バイナリ/ソース RPM パッケージ (Red Hat Linux など)</dt>
+    <dd><a href="http://www9.jp.qmail.org/rpms/qmail-addons/">http://www9.jp.qmail.org/rpms/qmail-addons/</a> (ミラー)</dd>
+    <dd><a href="http://www.qmail.org/rpms/qmail-addons/">http://www.qmail.org/rpms/qmail-addons/</a></dd>
+    <dd><a href="http://untroubled.org/rpms/mess822/">http://untroubled.org/rpms/mess822/</a></dd>
+<dt>Debian GNU/Linux</dt>
+    <dd>残念ながら存在しない</dd>
+<dt>FreeBSD など</dt>
+    <dd>FreeBSD の ports-current の「mess822」という port に含まれている</dd>
+</dl>
+-->
+
+<hr>
+<h2><a name="appendix">付録</a></h2>
+<h3><a name="appendix-reference">参考文献</a></h3>
+<dl>
+<dt>マニュアル</dt>
+    <dd><a href="../resource/man/dot-qmail.5.txt">dot-qmail(5)</a></dd>
+    <dd><a href="../resource/man/qmail-command.8.txt">qmail-command(8)</a></dd>
+    <dd><a href="../resource/man/qmail-getpw.8.txt">qmail-getpw(8)</a></dd>
+    <dd><a href="../resource/man/qmail-local.8.txt">qmail-local(8)</a></dd>
+    <dd><a href="../resource/man/qmail-lspawn.8.txt">qmail-lspawn(8)</a></dd>
+    <dd><a href="../resource/man/qmail-start.8.txt">qmail-start(8)</a></dd>
+<dt>RFC: An Extensible Message Format for Message Disposition Notifications</dt>
+    <dd><a href="../resource/rfc/rfc2298.txt">RFC 2298</a></dd>
+<dt>RFC: Internet Message Format</dt>
+    <dd><a href="../resource/rfc/rfc2822.txt">RFC 2822</a></dd>
+</dl>
+<h3><a name="appendix-changelog">更新履歴</a></h3>
+<dl>
+<dt>2001-12-17 佐藤文優</dt>
+    <dd>初版発行前の校正の取り込み。</dd>
+<dt>2001-11-12 佐藤文優</dt>
+    <dd>http://www.qmail.org を紹介している箇所にミラー http://www9.jp.qmail.org を追加。</dd>
+<dt>2001-10-11 佐藤文優</dt>
+    <dd>「ヘッダー」→「フィールド」、あるいは「ヘッダーフィールド」</dd>
+    <dd>フィールド名のあとにコロン「:」を追加</dd>
+<dt>2001-10-04 佐藤文優</dt>
+    <dd>第1稿の完成</dd>
+<dt>2001-09-24 佐藤文優</dt>
+    <dd>執筆開始</dd>
+</dl>
+
+<hr>
+<div class="footer">
+第7章 .qmail ファイルの利用 - qmail で作る快適メールサーバー<br>
+Copyright &copy; 2001,2010 SATOH Fumiyasu<br>
+</div>
+</body>
+</html>

@@ -1,0 +1,1040 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01//EN"
+                      "http://www.w3.org/TR/html4/strict.dtd">
+<html lang="ja">
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<meta http-equiv="Content-Language" content="ja">
+<meta http-equiv="Content-Style-Type" content="text/css">
+<meta name="author" lang="en" content="SATOH Fumiyasu">
+<meta name="author" lang="ja" content="佐藤 文優">
+<link rel="stylesheet" href="./book.css" type="text/css">
+<title>第11章 パッチによる qmail の動作変更 - qmail で作る快適メールサーバー</title>
+</head>
+<body>
+<h1><a name="top">第11章 パッチによる qmail の動作変更 - qmail で作る快適メールサーバー</a></h1>
+<div class="sign">
+佐藤 文優 &lt;<a href="http://www.sfo.jp/blog/">http://www.sfo.jp/blog/</a>&gt;<br>
+2001年12月17日 更新, 2001年10月8日 以来
+</div>
+
+<hr>
+<h2><a name="toc">目次</a></h2>
+<dl>
+<dt><a href="#patch">11.1 パッチ入門</a></dt>
+    <dd class="none"><a href="#patch-intro">11.1.1 パッチとは?</a>
+	<ul>
+	<li class="none">パッチは薬のようなもの</li>
+	<li class="none">パッチの形式</li>
+	<li class="none">パッチの適用方法</li>
+	</ul>
+    </dd>
+    <dd class="none"><a href="#patch-qmail">11.1.2 qmail 用のパッチ</a></dd>
+<dt><a href="#datetime">11.2 日時関連のパッチ</a></dt>
+    <dd class="none"><a href="#datetime-localtime">11.2.1 日付の表示を地方標準時にする</a>
+	<ul>
+	<li class="none">qmail が生成する日付は世界標準時</li>
+	<li class="none">qmail に地方標準時の日付を生成させる</li>
+	<li class="none"><code>qmail-date-localtime.patch</code> の問題点</li>
+	</ul>
+    </dd>
+<dt><a href="#quota">11.3 メールボックスの容量制限</a></dt>
+    <dd class="none"><a href="#quota-bounce">11.3.1 メールボックス容量超過の場合に即バウンスさせる</a></dd>
+<dt><a href="#smtpd">11.4 SMTP によるメール配送を制限するためのパッチ</a></dt>
+    <dd class="none"><a href="#smtpd-badrcptto">11.4.1 特定の宛先アドレスへのメールの受信を拒否する</a></dd>
+    <dd class="none"><a href="#smtpd-wildmat">11.4.2 受信拒否する送信者/宛先アドレスをパターンで指定可能にする</a>
+	<ul>
+	<li class="none">wildmat 形式のパターン表記法</li>
+	</ul>
+    </dd>
+    <dd class="none"><a href="#smtpd-mfcheck">11.4.3 送信者アドレスのドメイン部の正当性の検査</a></dd>
+<dt><a href="#bounce">11.5 バウンスメール関係のパッチ</a></dt>
+    <dd class="none"><a href="#bounce-message">11.5.1 バウンスメールのメッセージを変更可能にする</a></dd>
+    <dd class="none"><a href="#bouce-maxbytes">11.5.2 バウンスメールのサイズを制限する</a></dd>
+<dt><a href="#pop3">11.6 問題ある POP3 クライアントを救済するパッチ</a></dt>
+    <dd class="none"><a href="#pop3-status">11.6.1 「サーバーにメールを残す」機能が動作しないメールクライアントの救済</a>
+	<ul>
+	<li class="none">POP3 クライアントが取得済みのメールを判定するための仕組み</li>
+	<li class="none">qmail-pop3d に <code>Status:</code>/<code>X-UIDL:</code> フィールドをサポートさせる</li>
+	</ul>
+    </dd>
+    <dd class="none"><a href="#pop3-messenger">11.6.2 Netscape Messenger のメール取得の進捗表示が機能しない問題への対応</a>
+	<ul>
+	<li class="none">qmail 環境で現われる Netscape Messenger の不具合</li>
+	<li class="none">Netscape Messenger が期待する POP3 サーバーの応答</li>
+	<li class="none">Netscape Messenger の不具合に対応する</li>
+	</ul>
+    </dd>
+<dt><a href="#performance">11.7 大量のメール配送時のパフォーマンス改善</a></dt>
+    <dd class="none"><a href="#performance-concurrency">11.7.1 送信処理の最大並列数の上限を上げる</a>
+	<ul>
+	<li class="none">最大並列数に指定できる値の上限</li>
+	<li class="none">最大並列数の上限を 256 以上にする</li>
+	</ul>
+    </dd>
+<dt><a href="#appendix">付録</a></dt>
+    <dd class="none"><a href="#appendix-reference">参考文献</a></dd>
+    <dd class="none"><a href="#appendix-changelog">更新履歴</a></dd>
+</dl>
+
+<hr>
+<h2><a name="patch">11.1 パッチ入門</a></h2>
+<h3><a name="patch-intro">11.1.1 パッチとは?</a></h3>
+<p>
+一般的には、パッチ (patch) とは日本語で次のような意味を持ちます。
+</p>
+<dl>
+<dt>名詞</dt>
+    <dd class="none">
+    <ul>
+	<li>つぎはぎ、布切れ、パッチワーク用の布切れ</li>
+	<li>絆創膏 (ばんそうこう)、傷当て、眼帯</li>
+	<li>一区画、断片、部分、一節</li>
+    </ul>
+    </dd>
+<dt>動詞</dt>
+    <dd class="none">
+    <ul>
+	<li>に継ぎを当てる、を継ぎ合わせて作る</li>
+	<li>修繕する、(一時的に) 取り繕う</li>
+	<li>(事件・争いなどを) おさめる</li>
+    </ul>
+    </dd>
+</dl>
+<p>
+ソフトウェアでいう「パッチ」もほぼこれと同じで、
+動作の不具合を応急的に修正あるいは回避するため、
+ソフトウェアを書き換える「差分」情報のことを指します。
+また、その差分をソフトウェアに組み込むことを「パッチをあてる」、
+「パッチを適用する」などと表現します。
+</p>
+<p>
+ソフトウェアの「欠陥」という名の穴を繕うものだけがパッチではありません。
+いわばパッチワークのように、
+ソフトウェアに機能を追加したり、動作を変更するためのパッチも存在します。
+</p>
+<h4>パッチは薬のようなもの</h4>
+<p>
+パッチは薬と同じで、時には副作用が生じることがあります。
+構成によってはまったく影響の出ない副作用もありますが、
+明かに害となって現れることもあるでしょう。
+それが目に見える形で現われることもあれば、
+自覚症状がない (より危険) ことがあるかもしれません。
+また、複数のパッチの適用によって生じる副作用もあるかもしれません。
+麻酔薬のように当面の痛みを取り除くだけで、
+根本的な問題を解決できないこともあるでしょう。
+</p>
+<p>
+あなたが直面している問題をしっかりと分析し、
+適切なパッチを選択することが肝心です。
+パッチに謳われている効能を理解するのはもちろん、
+ソース形式のパッチであれば、
+どのような変更がされるのか解析するようにしましょう。
+</p>
+<h4>パッチの形式</h4>
+<p>
+パッチには、
+バイナリファイルを書き換えたりファイルごと置き換えるバイナリ形式のパッチと、
+ソースファイルやスクリプトを書き換えるためのソース形式のパッチがあります。
+この章では、
+qmail のソースに変更を加えるためのソース形式のパッチを扱います。
+ソースにパッチを適用したあとは、
+もちろん再コンパイルして新しいバイナリファイルを生成し、
+インストールする必要があります。
+</p>
+<p>
+ソースファイル用のパッチには、
+書き換える対象のソースファイルの名前と位置、そして変更点が記されています。
+1つのパッチファイルに複数のファイルのパッチが含まれていることもあります。
+</p>
+<p>
+以下に、
+「Hello, World!!」と表示するコマンドのソース (C言語) を、
+「Hello, New World!!」と改行を表示するように変更するためのパッチを示します。
+</p>
+<div>
+ソース形式のパッチの例 (<a href="sample/helloworld-new.patch">helloworld.c 用のパッチ</a>):
+<pre class="code"><code>--- helloworld.c.old    Thu Oct 11 19:50:51 2001
++++ helloworld.c        Thu Oct 11 19:51:53 2001
+@@ -1,5 +1,5 @@
+ int main(void)
+ {
+-    printf(&quot;Hello, World!!&quot;);
++    printf(&quot;Hello, New World!!\n&quot;);
+     return 0;
+ }
+</code></pre>
+</div>
+<p>
+この例を見るとわかるように、ソース形式のパッチの正体は、
+2 つのファイルを比較して違いを表示する diff コマンドの出力です。
+diff コマンドの出力には何種類か異なる形式がありますが、
+先の例のパッチは「unified 形式」と呼ばれるものです。
+パッチの提供者は、
+修正前後のファイルを diff コマンドに通し、
+得られた差分情報をパッチファイルとして第3者に配布します。
+</p>
+<p>
+以下にパッチの適用前後の <code>helloworld.c</code> を示します。
+</p>
+<div>
+<a href="sample/helloworld.c">パッチを適用する前の <code>helloworld.c</code></a>:
+<pre class="code"><code>int main(void)
+{
+<em>    printf(&quot;Hello, World!!&quot;);</em>
+    return 0;
+}
+</code></pre>
+</div>
+<div>
+<a href="sample/helloworld-new.c">パッチを適用した後の <code>helloworld.c</code></a>:
+<pre class="code"><code>int main(void)
+{
+<em>    printf(&quot;Hello, New World!!\n&quot;);</em>
+    return 0;
+}
+</code></pre>
+</div>
+
+<h4>パッチの適用方法</h4>
+<p>
+パッチを適用してソースファイルを変更するには、
+patch コマンドを使用します。
+patch コマンドの使用方法は、
+パッチの形式によって多少異なることがありますが、
+概ね、以下のように実行します。
+</p>
+<div>
+patch コマンドの実行例 (パッチファイル newworld.patch を適用):
+<pre class="terminal"><code>$ <kbd>ls</kbd>
+helloworld.c    newworld.patch
+$ <kbd>patch &lt; newworld.patch</kbd>
+patching file helloworld.c
+</code></pre>
+</div>
+<p>
+先にも述べたように、パッチ (diff の出力) の形式にはいくつかの種類がありますが、
+patch コマンドは種類を自動で認識し、適切に処理してくれます。
+パッチファイルにはパッチの前後にコメントや解説がついていることがありますが、
+patch コマンドはそれらを無視してくれます。
+</p>
+<p>
+通常、パッチファイル内には、
+パッチの対象となるファイルの相対パス名が記述されています。
+patch コマンドはそのパス名を利用してパッチ対象のファイルにアクセスするため、
+適切なディレクトリに移動してから patch コマンドを実行しなければなりません
+(patch コマンドの -d オプションを利用する方法もある)。
+</p>
+<p>
+パッチ対象のパス名の先頭に余計なディレクトリ名が含まれているなら、
+patch コマンドの -p オプションを利用して削除することができます。
+-p オプションには、パス名の先頭から何番目のスラッシュ「<code>/</code>」
+までを削除するかを指定します。
+</p>
+<!-- COMMENT by fumiya
+少なくとも GNU patch は、パッチファイルに含まれているコメントなどの
+ゴミを認識してくれる。また、パッチの適用箇所が、想定している場所から
+多少ずれていても、前後の行を比較することで適宜移動された場所にパッチを
+あててくれる。
+
+この点、追加は必要? 複数のパッチを適用すると浮上するであろう問題なので、
+できれば触れておきたい。
+
+Solaris patch の問題は?
+-->
+<h3><a name="patch-qmail">11.1.2 qmail 用のパッチ</a></h3>
+<p>
+以下の節では、qmail のソースに適用するパッチをいくつか紹介します。
+パッチを適用することで、
+qmail の動作を変更したり、
+追加の機能を実現することができます。
+</p>
+<p>
+qmail 用のパッチの多くは、
+qmail のユーザーサイトの 1つ「The qmail home page」
+から入手することができます。
+また、qmail のメーリングリストにパッチやその情報が投稿されることもあります。
+</p>
+<dl>
+<dt>The qmail home page</dt>
+    <dd><a href="http://www9.jp.qmail.org">http://www9.jp.qmail.org</a> (ミラー)</dd>
+    <dd><a href="http://www.qmail.org">http://www.qmail.org</a></dd>
+<dt>qmail mailing list</dt>
+    <dd><a href="http://cr.yp.to/lists.html#qmail">http://cr.yp.to/lists.html#qmail</a></dd>
+</dl>
+
+<h2><a name="datetime">11.2 日時関連のパッチ</a></h2>
+<h3><a name="datetime-localtime">11.2.1 日付の表示を地方標準時にする</a></h3>
+<h4>qmail が生成する日付は世界標準時</h4>
+<p>
+qmail は様々な場面で日付文字列の生成や表示を行いますが、
+それらはすべて世界標準時の日時になります。
+そのような日付には、
+世界標準時からの時差がないことを意味する「-0000」、
+またはグリニッジ標準時 (Greenwich Mean Time) を意味する「GMT」、
+あるいはその両方が付加されています
+(qmail の場合はどちらかのみ)。
+</p>
+<!-- COMMENT by fumiya
+昔は GMT が世界標準時だったが、現在では協定世界時
+(UTC, Universal Coordinated Time)。
+なぜ「UCT」じゃないんだろう?
+-->
+<p>
+一方、qmail 以外の MTA やメールクライアントの多くは、
+システムの地域情報の設定 (タイムゾーン)
+に合わせ、日付は地方時間で生成します。
+例えば日本では世界標準時からの時差は 9時間なので、
+日付にはそれを意味する「+0900」、
+または「JST」(Japan Standard Time)、
+あるいはその両方が付加されます。
+</p>
+<!-- COMMENT by fumiya
+FIXME: パッチを適用する理由が欲しいが…。
+-->
+<!-- COMMENT by fumiya
+localtime(3) の問題点: http://cr.yp.to/proto/utctai.html
+UTC か TAI(?) に統一されていたほうが便利なんだろうな。
+-->
+<h4>qmail に地方標準時の日付を生成させる</h4>
+<p>
+次に紹介するパッチは、
+qmail の日付生成処理に変更を施し、
+システムの地域設定に従った地域標準時の日付を生成するようにします。
+</p>
+<dl>
+<dt>日付の表示を地方標準時にするパッチ</dt>
+    <dd><a href="ftp://ftp.nlc.net.au/pub/unix/mail/qmail/qmail-date-localtime.patch">ftp://ftp.nlc.net.au/pub/unix/mail/qmail/qmail-date-localtime.patch</a></dd>
+<dt>このパッチの適用例</dt>
+    <dd><pre class="terminal"><code>$ <kbd>cd <var>source/dir/of/</var>qmail-1.03</kbd>
+$ <kbd>patch -p1 &lt; <var>/path/to/</var>qmail-date-localtime.patch</kbd></code></pre></dd>
+</dl>
+<p>
+このパッチによる動作は、設定ファイルで制御することはできません。
+代わりに、コマンドを起動する前に、
+環境変数 <code>TZ</code> を設定してください
+(マニュアル tzset(3) などを参照のこと)。
+</p>
+<p>
+このパッチは、qmail の以下のコマンドに影響を及ぼします。
+</p>
+<dl>
+<dt>qmail-inject</dt>
+    <dd>
+    <code>Date:</code> (<code>Recent-Date:</code>) フィールドの日付
+    (ヘッダーに含まれていない場合に追加する)
+    </dd>
+<dt>qmail-send</dt>
+    <dd>バウンス通知メールの <code>Date:</code> フィールドの日付</dd>
+<dt>qmail-smtpd など<!-- qmail-qmqpd, qmail-qmtpd --></dt>
+    <dd>受信したメールに追加する <code>Received:</code> フィールドの日付</dd>
+<dt>qmail-qread</dt>
+    <dd>メールがキューに到達した日時を示す日付</dd>
+</dl>
+<h4><code>qmail-date-localtime.patch</code> の問題点</h4>
+<p>
+このパッチにより、qmail-qread が出力する日付の表示に問題が発生します。
+qmail-qread は、キューにあるメールの情報を表示するコマンドです。
+その情報の中にはメールがキューに到着した日時が含まれており、
+このパッチによりシステムの地域設定 (または環境変数 <code>TZ</code> の値)
+の標準時で表示されますが、
+実際の地域設定に関わらず必ず「GMT」と表示されてしまいます。
+これを解消するには、qmail-qread.c に以下のようなパッチを適用するとよいでしょう。
+</p>
+<div>
+<a href="sample/qmail-qread-date-localtime.patch">qmail-date-localtime.patch による qmail-qread の不具合を解消するパッチ</a>:
+<pre class="code"><code>--- qmail-qread.c.dist  Mon Jun 15 19:53:16 1998
++++ qmail-qread.c       Mon Oct 15 18:50:53 2001
+@@ -65,8 +65,8 @@
+ 
+  len = 0;
+  datetime_tai(&amp;dt,qtime);
+- i = date822fmt(s,&amp;dt) - 7/*XXX*/; len += i; if (s) s += i;
+- i = fmt_str(s,&quot; GMT  #&quot;); len += i; if (s) s += i;
++ i = date822fmt(s,&amp;dt) - 1/*XXX*/; len += i; if (s) s += i;
++ i = fmt_str(s,&quot;  #&quot;); len += i; if (s) s += i;
+  i = fmt_ulong(s,id); len += i; if (s) s += i;
+  i = fmt_str(s,&quot;  &quot;); len += i; if (s) s += i;
+  i = fmt_ulong(s,size); len += i; if (s) s += i;
+</code></pre>
+</div>
+
+<h2><a name="quota">11.3 メールボックスの容量制限</a></h2>
+<h3><a name="quota-bounce">11.3.1 メールボックス容量超過の場合に即バウンスさせる</a></h3>
+<p>
+UNIX には、ユーザーのディスク使用量を制限するための
+「クォータ (quota)」と呼ばれる機能があります。
+クォータによりディスク使用を制限されたユーザーは、
+作成できるファイルの数と使用できる容量に制限が設けられます。
+制限に達っすると、ファイルの新規作成やファイルへのデータ出力は失敗します。
+</p>
+<p>
+qmail (qmail-local) は、
+メールボックスへのメール保存の処理に失敗すると、
+一時エラーとし、メールボックスへの配送は後ほど再試行されます。
+この動作はクォータの制限によって失敗した場合も変わりません。
+その後も問題が解消されなければ、
+メールは <code>control/queuelifetime</code>
+で指定された時間だけキューに滞留したのち、バウンスします。
+メールの送信者は、そのときやっとメールが届かないことがわかりますが、
+バウンスメールを見ても送信先のメールボックスが一杯であることはわかりません。
+</p>
+<p>
+次のパッチを適用することで、
+qmail-local はクォータによる書き込み失敗を検知できるようになり、
+そのような場合には永続的エラーとするようになります。
+</p>
+<dl>
+<dt>qmail-local にクォータ制限によるエラーを検知可能にするパッチ</dt>
+    <dd><a href="http://www9.jp.qmail.org/qmail-1.03-quotas-1.1.patch">http://www9.jp.qmail.org/qmail-1.03-quotas-1.1.patch</a> (ミラー)</dd>
+    <dd><a href="http://www.qmail.org/qmail-1.03-quotas-1.1.patch">http://www.qmail.org/qmail-1.03-quotas-1.1.patch</a></dd>
+<dt>このパッチの適用例</dt>
+    <dd><pre class="terminal"><code>$ <kbd>cd <var>source/dir/of/</var>qmail-1.03</kbd>
+$ <kbd>patch &lt; <var>/path/to/</var>qmail-1.03-quotas-1.1.patch</kbd></code></pre></dd>
+</dl>
+<p>
+このパッチにより、クォータ制限に達っしているユーザーへのメール配送は、
+即座にバウンスするようになります。
+バウンスメールには、配送に失敗した原因として、
+宛先ユーザーのメールボックスが一杯であることが示されます。
+</p>
+<!-- COMMENT by fumiya
+容量がハードコーディングされているし、.qmail ファイルでチェックコマンドを
+利用すれば済むので、このパッチは不採用。
+<h3><a name="quota-user">11.3.2 クォータによらない独自のメールボックス容量制限</a></h3>
+<p>
+UNIX のディスククォータ機能は、
+利用できる最大のディスク使用量を、
+UNIX ユーザーあるいはグループごとに割り当てることができます。
+</p>
+<p>
+</p>
+<dl>
+<dt></dt>
+    <dd><a href="http://www.mrjesus.org/patches/qmail-local-quota.patch">http://www.mrjesus.org/patches/qmail-local-quota.patch</a></dd>
+</dl>
+-->
+<!-- COMMENT by fumiya
+.qmail ファイルで呼び出す容量制限スクリプト
+http://www.pgregg.com/projects/qmail/mailquotacheck/
+-->
+
+<h2><a name="smtpd">11.4 SMTP によるメール配送を制限するためのパッチ</a></h2>
+<p>
+qmail (qmail-smtpd) は、
+SMTP の <code>MAIL</code> コマンドで渡される送信者アドレス
+(<code>control/badmailfrom</code>) や、
+<code>RCPT</code> コマンドで渡される宛先アドレスのドメイン部
+(<code>control/rcpthosts</code>, <code>morercpthosts</code>)、
+<code>DATA</code> コマンドで渡されるメールのサイズ
+(<code>control/databytes</code>) により、
+メールの受信を拒否することができます。
+<!-- FIXME: ほかの章で触れられているなら振る。 -->
+</p>
+<p>
+ここで紹介するパッチは、
+SMTP によるメールの受信と配送に対し、
+受信の拒否条件の設定をより柔軟に指定可能にするパッチや、
+なにかしらの制限を加えるためのパッチです。
+これらは主に、SPAM メールの受信や配送を抑制するために利用されます。
+</p>
+<h3><a name="smtpd-badrcptto">11.4.1 特定の宛先アドレスへのメールの受信を拒否する</a></h3>
+<p>
+標準の qmail-smtpd は、宛先アドレスのドメイン部により受信の拒否が可能ですが、
+宛先アドレスのローカル部を含めた受信拒否の判定をさせることはできません。
+次に紹介するパッチを適用することで、ドメイン部だけでなく、
+宛先アドレス全体により受信の可否を判定できるようになります。
+</p>
+<dl>
+<dt>特定の宛先アドレスへのメールの受信を拒否するパッチ</dt>
+    <dd><a href="http://patch.be/qmail/badrcptto.html">http://patch.be/qmail/badrcptto.html</a></dd>
+<dt>このパッチの適用例</dt>
+    <dd><pre class="terminal"><code>$ <kbd>cd <var>source/dir/of/</var>qmail-1.03</kbd>
+$ <kbd>patch -p1 &lt; <var>/path/to/</var>badrcptto.patch</kbd></code></pre></dd>
+</dl>
+<p>
+受信を拒否する宛先アドレスは、
+このパッチによる追加の設定ファイル <code>control/badrcptto</code> に記述します。
+このファイルの形式は、
+受信を拒否する送信者アドレスを指定するための
+<code>control/badmailfrom</code> ファイルと同じです。
+例えば、宛先アドレスが badname@example.com のメールと、
+宛先アドレスのドメイン部が baddomain.example.net のメールの受信を拒否するには、
+次のように記述します。
+</p>
+<div>
+SMTP で特定の宛先アドレスのメールの受信を拒否する
+(<code>control/badrcptto</code>):
+<pre class="code"><code>badname@example.com
+@baddomain.example.net
+</code></pre>
+</div>
+<h3><a name="smtpd-wildmat">11.4.2 受信拒否する送信者/宛先アドレスをパターンで指定可能にする</a></h3>
+<p>
+qmail には標準で、
+特定の送信者アドレスからのメールの受信を拒否する機能があります。
+拒否する送信者アドレスの指定は
+<code>control/badmailfrom</code> ファイルで行いますが、
+固定的なアドレスかドメインの指定しかできません。
+先の節で紹介した宛先アドレスによる受信拒否用のパッチの機能も同様です。
+</p>
+<p>
+ここで紹介するパッチは、
+ニューズサーバーソフトウェア INN で利用されている
+wildmat と呼ばれるパターン一致処理を qmail-smptd に追加し、
+受信を拒否する送信者/宛先アドレスの指定にパターンを記述可能にするパッチです。
+</p>
+<dl>
+<dt>受信拒否する送信者/宛先アドレスをパターンで指定可能にするパッチ</dt>
+    <dd><a href="http://www.unixpimps.org/software/wildmat/">http://www.unixpimps.org/software/wildmat/</a></dd>
+<dt>このパッチの適用例</dt>
+    <dd><pre class="terminal"><code>$ <kbd>cd <var>source/dir/of/</var>qmail-1.03</kbd>
+$ <kbd>gzip -dc <var>/path/to/</var>wildmat-0.3.tar.gz | tar xf -</kbd>
+$ <kbd>patch &lt; wildmat.patch</kbd></code></pre></dd>
+</dl>
+<p>
+このパッチを適用することで、
+qmail 標準の
+<code>control/badmailfrom</code> ファイルは機能しなくなり、
+代わりに
+<code>control/badmailpatterns</code> ファイルを使うようになります。
+しかも、このファイルに記述したアドレスは、
+送信者アドレスだけでなく宛先アドレスにも適用されます。
+残念ながら、
+受信を拒否する送信者アドレスと宛先アドレスを別々に指定することはできません。
+この点、十分のご注意ください。
+</p>
+<h4>wildmat 形式のパターン表記法</h4>
+<p>
+wildmat 形式のパターン表記法は、
+シェルのワイルドカードパターンの表記に似ています
+(glob(3) などを参照のこと)。
+残念ながらパッチには詳しい解説が含まれていませんので、
+INN の付属のマニュアル wildmat(3) を参照するか、
+Web の検索ページで探してみてください。
+ここで簡単に解説します。
+</p>
+<dl>
+<dt><code>?</code></dt>
+    <dd>あらゆる単一の文字に一致する。</dd>
+<dt><code>*</code></dt>
+    <dd>あらゆる文字列に一致する。空文字列にも一致する。</dd>
+<dt><code>[<var>x...y</var>]</code></dt>
+    <dd>括弧内に含まれる単一の文字に一致する。</dd>
+    <dd>ハイフン「<code>-</code>」で文字の範囲を指定することができる。(例: <code>[0-9a-z]</code>)</dd>
+    <dd>ハイフンを含めるには括弧内の最初か最後に指定する。</dd>
+    <dd>閉じる括弧「]」を含めるには括弧内の最初に指定する。</dd>
+<dt><code>[^<var>x...y</var>]</code></dt>
+    <dd>括弧内に含まれない単一の文字に一致する。</dd>
+<dt><code>\<var>x</var></code></dt>
+    <dd>任意の単一の文字 <code><var>x</var></code> に一致する。</dd>
+    <dd>「<code>?</code>」などの特殊な文字の機能を打ち消すために用いる。</dd>
+</dl>
+<p>
+以下に <code>control/badmailpatterns</code> ファイルの記述例を示します。
+</p>
+<div>
+SMTP で特定のパターンの送信者/宛先アドレスのメールの受信を拒否する
+(<code>control/badmailpatterns</code>):
+<pre class="code"><code>*@baddomain.example.net
+*%*@*
+*@*@*
+</code></pre>
+</div>
+<h3><a name="smtpd-mfcheck">11.4.3 送信者アドレスのドメイン部の正当性の検査</a></h3>
+<p>
+SPAM メール送信者の多くは、
+送信者アドレスを偽って SPAM メールを送信します。
+その際に利用されるメールアドレスのドメイン部は、
+SPAM 送信者とは関係のない第3者のドメインを勝手に名乗ったり、
+実在しないドメインが利用されます。
+</p>
+<p>
+次に紹介するパッチを qmail に適用することで、
+qmail-smtpd は SMTP の
+<code>MAIL</code> コマンドで指定される送信者アドレスからドメイン部を抜き出し、
+DNS でそのドメインの MX レコードを検索するようになります。
+該当する MX レコードが存在しない場合、
+qmail-smtpd は無効な送信者アドレスと判断してメールの受信を拒否します。
+</p>
+<dl>
+<dt>送信者アドレスのドメイン部を DNS で検査するためのパッチ</dt>
+<!-- サイト消失?
+    <dd><a href="http://lsc.kva.hu/dl/qmail-1.03-mfcheck.3.patch">http://lsc.kva.hu/dl/qmail-1.03-mfcheck.3.patch</a></dd>
+-->
+    <dd><a href="http://www9.jp.qmail.org/qmail-1.03-mfcheck.3.patch">http://www9.jp.qmail.org/qmail-1.03-mfcheck.3.patch</a> (ミラー)</dd>
+    <dd><a href="http://www.qmail.org/qmail-1.03-mfcheck.3.patch">http://www.qmail.org/qmail-1.03-mfcheck.3.patch</a></dd>
+<dt>このパッチの適用例</dt>
+    <dd><pre class="terminal"><code>$ <kbd>cd <var>source/dir/of/</var>qmail-1.03</kbd>
+$ <kbd>patch -p1 &lt; <var>/path/to/</var>qmail-1.03-mfcheck.3.patch</kbd></code></pre></dd>
+</dl>
+<p>
+このパッチによる機能は、追加の設定ファイル
+<code>control/mfcheck</code> に 0 か 1 を記述することで、
+無効にするか有効にするかを制御することができます。
+デフォルトは 0 で、送信者アドレスのドメイン部の検査機能は無効になります。
+この設定は環境変数 <code>MFCHECK</code> の値でも指定可能で、
+<code>control/mfcheck</code> ファイルによる指定よりも優先されます。
+</p>
+
+<!-- COMMENT by fumiya
+<h3><a name="smtpd-tarpit">11.4.4</a></h3>
+tarpit == tar pit (タールの池、タールピット)
+<dl>
+<dt>一定数以上の <code>RCPT</code> コマンドに対し遅延を入れるパッチ</dt>
+    <dd><a href="http://www.palomine.net/qmail/tarpit.html">http://www.palomine.net/qmail/tarpit.html</a></dd>
+</dl>
+<h3><a name="smtpd-spamcontrol">11.4.5</a></h3>
+<dl>
+<dt>SPAMCONTROL パッチ</dt>
+    <dd><a href="http://www.fehcom.de/qmail/spam.html">http://www.fehcom.de/qmail/spam.html</a></dd>
+</dl>
+以下のパッチの機能 + α
+badrcptto
+wildmat + badrcptpatterns 対応
+mfcheck
+
+SPAMCONTROL パッチ 1.6による追加の設定ファイル
+badrcptto
+badrcptpatterns
+badmailpatterns
+blackholedsender
+nodnscheck
+relayclients
+relaydomains
+relaymailfrom
+tarpitcount
+tarpitdelay
+-->
+
+<h2><a name="bounce">11.5 バウンスメール関係のパッチ</a></h2>
+<p>
+qmail (qmail-send) は、
+メール配送が失敗した場合に送出するバウンスメールについて、
+ヘッダーの <code>From:</code> フィールドの内容を設定可能にしています
+(ただし送信者アドレスは設定に関係なく必ず空)。
+また、バウンスメールがバウンスしたときに送出する 2重バウンスメールについては、
+送付先の宛先アドレスが設定可能です。
+</p>
+<p>
+ここで紹介するパッチは qmail-send が生成するバウンスメールに関するもので、
+qmail 標準より柔軟な設定変更を可能とします。
+パッチやその設定によっては、
+qmail が従っている標準のバウンスメッセージ形式
+(QSBMF) に適合しなくなることがあります。
+ご注意ください。
+</p>
+<dl>
+<dt>The qmail-send Bounce Message Format (QSBMF)</dt>
+    <dd><a href="http://cr.yp.to/proto/qsbmf.txt">http://cr.yp.to/proto/qsbmf.txt</a></dd>
+</dl>
+<h3><a name="bounce-message">11.5.1 バウンスメールのメッセージを変更可能にする</a></h3>
+<p>
+このパッチを適用することで、
+qmail が生成するバウンスメールと
+2重バウンスメールに含まれる表題
+(ヘッダーの <code>Subject:</code> フィールドの内容)
+と本文のメッセージを設定変更可能にできます。
+</p>
+<dl>
+<dt>バウンスメールの表題とメッセージを変更可能にするパッチ</dt>
+    <dd><a href="http://www9.jp.qmail.org/qmail-bouncecontrol-1.03.patch">http://www9.jp.qmail.org/qmail-bouncecontrol-1.03.patch</a> (ミラー)</dd>
+    <dd><a href="http://www.qmail.org/qmail-bouncecontrol-1.03.patch">http://www.qmail.org/qmail-bouncecontrol-1.03.patch</a></dd>
+<dt>このパッチの適用例</dt>
+    <dd><pre class="terminal"><code>$ <kbd>cd <var>source/dir/of/</var>qmail-1.03</kbd>
+$ <kbd>patch -p1 &lt; <var>/path/to/</var>qmail-bouncecontrol-1.03.patch</kbd></code></pre></dd>
+</dl>
+<p>
+このパッチにより、
+以下のような 4つの設定ファイルが追加されます。
+ファイルが存在しない場合は、qmail 標準の表題/メッセージとなります。
+</p>
+<dl>
+<dt><code>control/bouncesubject</code></dt>
+    <dd>バウンスメールの <code>Subject:</code> フィールドの内容</dd>
+    <dd>最初の 1行だけ使用され、それ以降の行は無視される</dd>
+<dt><code>control/bouncemessage</code></dt>
+    <dd>バウンスメールの本文のメッセージ</dd>
+<dt><code>control/doublebouncesubject</code></dt>
+    <dd>2重バウンスメールの <code>Subject:</code> フィールドの内容</dd>
+    <dd>最初の 1行だけ使用され、それ以降の行は無視される</dd>
+<dt><code>control/doublebouncemessage</code></dt>
+    <dd>2重バウンスメールの本文のメッセージ</dd>
+</dl>
+<p>
+qmail-send が生成するバウンスメールには
+<code>Content-Type:</code> フィールドは含まれていないため、
+<code>control/bouncemessage</code>, <code>doublebouncemessage</code>
+に記述するメッセージにはテキスト形式の ASCII 文字だけを含めることができます。
+<!-- COMMENT by fumiya
+RFC 2045: 5.2 節
+-->
+よって、日本語などを含めることはできません。
+また、メッセージに空行を含めてしまうと、
+<a href="http://cr.yp.to/proto/qsbmf.txt">QSBMF</a>
+に従わない形式になってしまいます。
+</p>
+<p>
+<code>control/bouncesubject</code>,
+<code>doublebouncesubject</code>
+に記述する表題は、
+そのままバウンスメールのヘッダー部に入るため、
+ASCII 文字だけを含めることができます。
+日本語などを含める場合は、
+いわゆる「MIME エンコード」形式にしなければなりません。
+(<a href="../resource/rfc/rfc2047.txt">RFC 2047</a>
+「Multipurpose Internet Mail Extensions Part Three:
+Message Header Extensions for Non-ASCII Text」)
+</p>
+
+<h3><a name="bouce-maxbytes">11.5.2 バウンスメールのサイズを制限する</a></h3>
+<p>
+qmail-send が生成するバウンスメールには、
+バウンスしたメールがヘッダーと本文とも受信したときのままの形で含まれます。
+次のパッチを適用することで、
+バウンスメールに含める元のメールのサイズに制限をかけることが可能になります。
+</p>
+<dl>
+<dt>バウンスメールに付加される元のメールのサイズを制限するパッチ</dt>
+    <dd><a href="http://www.jedi.claranet.fr/qmail-bounce.patch">http://www.jedi.claranet.fr/qmail-bounce.patch</a></dd>
+    <dd><a href="http://www9.jp.qmail.org/www.jedi.claranet.fr/qmail-bounce.patch">http://www9.jp.qmail.org/www.jedi.claranet.fr/qmail-bounce.patch</a> (ミラー)</dd>
+    <dd><a href="http://www.qmail.org/www.jedi.claranet.fr/qmail-bounce.patch">http://www.qmail.org/www.jedi.claranet.fr/qmail-bounce.patch</a> (ミラー)</dd>
+<dt>このパッチの適用例</dt>
+    <dd><pre class="terminal"><code>$ <kbd>cd <var>source/dir/of/</var>qmail-1.03</kbd>
+$ <kbd>patch &lt; <var>/path/to/</var>qmail-bounce.patch</kbd></code></pre></dd>
+</dl>
+<p>
+このパッチにより、設定ファイル <code>control/bouncemaxbytes</code>
+が追加されます。
+このファイルには、
+バウンスメールに含める元のメールの最大サイズをバイト数で指定します。
+デフォルトは 50000 バイトです。
+残念ながら、このパッチによる動作を無効にして制限なしにすることはできません。
+</p>
+<p>
+バウンスしたメールがこのサイズを越えている場合、
+バウンスメールに含まれる元メールはサイズを越える部分が省略され、
+代わりに改行と「<code>--- End of message stripped.</code>」
+というメッセージが付加されます。
+<!-- COMMENT by fumiya
+実際は、主力を 128 バイト行うごとにチェックしているので、
+128 バイトの境界にまるめられる。行ごとに出力されるわけでもないので、
+マルチバイトの文字が途中で分離される可能性もある。
+-->
+</p>
+
+<!-- COMMENT by fumiya
+<h3><a name="bounce-mime">11.5.3 バウンスメールをマルチパート形式にする</a></h3>
+http://www.ezmlm.org/pub/patches/qmail-mime.tgz
+-->
+
+<h2><a name="pop3">11.6 問題ある POP3 クライアントを救済するパッチ</a></h2>
+<h3><a name="pop3-status">11.6.1 「サーバーにメールを残す」機能が動作しないメールクライアントの救済</a></h3>
+<h4>POP3 クライアントが取得済みのメールを判定するための仕組み</h4>
+<p>
+一般的に POP3 に対応しているメールクライアントは、
+POP3 サーバーから取得したメールをサーバーから削除せずに、
+POP3 サーバーに残しておくことができます。
+POP3 クライアントは、
+1度サーバーから取得したメールを再び取得しないようにするため、
+POP3 (<a href="../resource/rfc/rfc1939.txt">RFC 1939</a>
+「Post Office Protocol - Version 3」)
+のオプションとして定義されている
+<code>UIDL</code> コマンドで得られるメールごとの識別子、
+あるいはメールのヘッダーに含まれる
+<code>Status:</code> や <code>X-UIDL:</code> フィールドの値を利用します
+(クライアントの実装に依存)。
+</p>
+<p>
+<code>UIDL</code> コマンドはその動作である
+「Unique-ID Listing」から名付けられたもので、
+サーバーのメールボックス内にあるメールから、
+各メールを一意に識別するための識別子 (UID) を返します。
+UIDL に対応している POP3 クライアントは、
+この識別子を利用してメールが取得済みであるかどうかを判断します。
+qmail 付属の POP3 サーバーである qmail-pop3d は、
+<code>UIDL</code> コマンドをサポートしています。
+</p>
+<p>
+<code>Status:</code> フィールドには、
+メールが新着か、既読か、取得済みかどうかの状態が保持されます。
+メールボックスを直接参照するメールクライアントである mail コマンドや、
+いくつかの POP3 サーバーの実装がサポートしており、
+必要に応じて Status: フィールドの値を書き換えます。
+しかし、qmail-pop3d は Status: フィールドをサポートしていません。
+<a href="../resource/rfc/rfc2076.txt">RFC 2076</a>
+「Common Internet Message Headers」によると、
+<code>Status:</code> フィールドは非標準のヘッダーフィールドです。
+</p>
+<p>
+<code>X-UIDL:</code> フィールドには、
+POP3 の <code>UIDL</code> コマンドで得られるのと同じ、
+一意の識別子が保持されます。
+詳細は不明ですが、
+何らかの形でこのフィールドの値を利用するクライアントが存在するようです。
+qmail-pop3d は <code>X-UIDL:</code> フィールドをサポートしていません。
+</p>
+<h4>qmail-pop3d に <code>Status:</code>/<code>X-UIDL:</code> フィールドをサポートさせる</h4>
+<p>
+以上のように、
+UIDL コマンドをサポートしていなかったり、
+UIDL をサポートしていても <code>X-UIDL:</code> フィールドに依存している
+POP3 クライアントは、
+qmail-pop3d の下では「サーバーにメールを残す」機能がうまく動作しません。
+次に紹介するパッチを適用することで qmail-pop3d がメールに
+<code>Status:</code>/<code>X-UIDL:</code> フィールドを追加するようになります。
+</p>
+<dl>
+<dt>qmail-pop3d で <code>Status:</code>/<code>X-UIDL:</code> フィールドをサポートするパッチ</dt>
+    <dd><a href="http://homepages.munich.netsurf.de/Franz.Sirl/qmail-pop3d-1.03.diff">http://homepages.munich.netsurf.de/Franz.Sirl/qmail-pop3d-1.03.diff</a></dd>
+<dt>このパッチの適用例</dt>
+    <dd><pre class="terminal"><code>$ <kbd>cd <var>source/dir/of/</var>qmail-1.03</kbd>
+$ <kbd>patch -p1 &lt; <var>/path/to/</var>qmail-pop3d-1.03.diff</kbd></code></pre></dd>
+</dl>
+<p>
+このパッチによる追加の設定ファイルはありません。
+また、このパッチによる動作を抑制することはできません。
+</p>
+<h3><a name="pop3-messenger">11.6.2 Netscape Messenger のメール取得の進捗表示が機能しない問題への対応</a></h3>
+<h4>qmail 環境で現われる Netscape Messenger の不具合</h4>
+<p>
+Netscape 社の Netscape Navigator / Communicator に付属のメールクライアント
+Netscape Messenger は、
+POP3 サーバーからメールを取得している間、
+取得の進捗状況をダイアログウィンドウに表示します。
+ダイアログは、
+サーバー上にあるメールの総数と取得した数、
+そして進行の度合を横長のメーターとパーセンテージで表わします。
+</p>
+<div>
+図: Netscape Messenger のメールの取得状況を示すダイアログ:
+<img src="image/messenger-downloaddialog.png" alt="Netscape Messenger 4.78 (ja) Download Dialog">
+</div>
+<p>
+しかし Messenger は、
+POP3 サーバー が qmail-pop3d であると、
+横長メーターとパーセンテージが正しく表示されません。
+以下のように、メーターは一定のまま変化せず、
+パーセンテージの表示はされません。
+</p>
+<div>
+図: qmail-pop3d に対しては進捗割合いの表示がおかしくなる:
+<img src="image/messenger-downloaddialog2.png" alt="Netscape Messenger 4.78 (ja) Download Dialog with qmail-pop3d">
+</div>
+<p>
+原因は qmail-pop3d ではなく Netscape Messenger にあります。
+</p>
+<h4>Netscape Messenger が期待する POP3 サーバーの応答</h4>
+<p>
+POP3 には、
+サーバーからメールを取得 (retrieve) するための
+<code>RETR</code> コマンドが用意されています。
+POP3 サーバーは <code>RETR</code> コマンドの応答として、
+指定された番号のメールがあるならコマンドを受け付けたことを意味する
+「<code>+OK</code>」行とメールのメッセージ、
+そして最後にドット「<code>.</code>」だけの行をクライアントに返します。
+以下に、広く普及している POP3 サーバーの実装の一つである Qpopper に対して
+telnet コマンドで接続し、手動でメールを取得する様子を示します。
+</p>
+<div>
+POP3 サーバー Qpopper から telnet コマンド経由でメールを取得:
+<pre class="terminal"><code>$ <kbd>telnet mail.example.net pop3</kbd>
+Trying 192.168.1.1...
+Connected to mail.example.net.
+Escape character is '^]'.
++OK QPOP (version 3.0.2) at mail.example.net starting.  
+<kbd>USER <var>ユーザー名</var></kbd>
++OK Password required for <var>ユーザー名</var>.
+<kbd>PASS <var>パスワード</var></kbd>
++OK <var>ユーザー名</var> has 2 visible messages (0 hidden) in 5593 octets.
+<kbd>LIST</kbd>
++OK 2 visible messages (5593 octets)
+1 2881
+2 2712
+.
+<kbd>RETR 1</kbd>
+<em>+OK 2881 octets</em>
+<var>メールメッセージ
+…</var>
+.
+</code></pre>
+※ <code>USER</code>, <code>PASS</code> コマンドにより認証を受け、
+<code>LIST</code> でメールの一覧 (番号とサイズ) を表示、<code>RETR</code> で取得。
+</div>
+<p>
+ご覧のように、Qpopper は
+<code>RETR</code> コマンドの応答の「<code>+OK</code>」行に
+「<code><var>メールのサイズ</var> octets</code>」を付加します。
+一方、qmail-pop3d は「<code>+OK</code>」とだけ応答します。
+<a href="../resource/rfc/rfc1939.txt">RFC 1939</a> によると、
+動作例としてメールのサイズが付加された応答を返すものが記載されていますが、
+そのようにすべきと規定しているわけではありません。
+</p>
+<h4>Netscape Messenger の不具合に対応する</h4>
+<p>
+Netscape Messenger は <code>RETR</code> コマンドの応答として
+Qpopper が返すような形式を期待しており、
+そこから得られるメールのサイズから進捗のパーセンテージを計算しています。
+このため、<code>RETR</code> コマンドに対してメールのサイズを返さない
+qmail-pop3d 相手ではうまく機能しません。
+そこで、次のパッチを qmail-pop3d に適用することで、
+Messenger の不具合を回避することができます。
+</p>
+<!-- COMMENT by fumiya
+<div>
+POP3 サーバー qmail-pop3d から telnet コマンド経由でメールを取得:
+<pre class="terminal"><code>$ <kbd>telnet qmail-pop3d.example.net pop3</kbd>
+Trying 192.168.1.10...
+Connected to localhost.
+Escape character is '^]'.
++OK &lt;11029.1003850846@qmail-pop3d.example.net&gt;
+<kbd>USER <var>ユーザー名</var></kbd>
++OK 
+<kbd>PASS <var>パスワード</var></kbd>
++OK 
+<kbd>LIST</kbd>
+1 2881
+2 2712
+.
+<kbd>RETR 1</kbd>
++OK
+<var>メールメッセージ</var>
+.
+</code></pre>
+</div>
+-->
+<dl>
+<dt>POP3 の <code>RETR</code> コマンドの応答にメールのサイズを追加するパッチ</dt>
+    <dd><a href="http://www9.jp.qmail.org/netscape-progress.patch">http://www9.jp.qmail.org/netscape-progress.patch</a> (ミラー)</dd>
+    <dd><a href="http://www.qmail.org/netscape-progress.patch">http://www.qmail.org/netscape-progress.patch</a></dd>
+<dt>このパッチの適用例</dt>
+    <dd><pre class="terminal"><code>$ <kbd>cd <var>source/dir/of/</var>qmail-1.03</kbd>
+$ <kbd>patch &lt; <var>/path/to/</var>netscape-progress.patch</kbd></code></pre></dd>
+</dl>
+
+<h2><a name="performance">11.7 大量のメール配送時のパフォーマンス改善</a></h2>
+<h3><a name="performance-concurrency">11.7.1 送信処理の最大並列数の上限を上げる</a></h3>
+<h4>最大並列数に指定できる値の上限</h4>
+<p>
+qmail はメール配送処理を、
+複数のプロセスを生成し並行して実行します。
+ローカルユーザーへの配送の最大並列数は
+<code>control/concurrencylocal</code>、
+リモートへの配送の最大並列数は
+<code>control/concurrencyremote</code>
+の設定により制限され、デフォルトの最大並列数はローカル配送は 10、
+リモート配送は 20 に設定されています。
+大量のメールを配送する必要があるならば、
+配送処理の最大並列数を上げることで
+(ほかにボトルネックが生じない限り)、
+その分だけメール配送のパフォーマンスは向上します。
+</p>
+<p>
+しかし、
+<code>control/concurrencylocal</code>, <code>concurrencyremote</code>
+で指定できる並列数は、最大で 120 に制限されています。
+この制限は、qmail のコンパイル時、
+qmail のソースツリーに含まれる
+<code>conf-spawn</code> ファイルに記述されている値で決まります。
+このファイルの値を増やして qmail をコンパイルすることで、
+121 以上の並列配送を実現できます。
+</p>
+<p>
+しかしそれでも、
+<code>conf-spawn</code> ファイルに記述できる最大並列数の最大値は
+255 に制限されます。
+これは qmail の内部実装による制限です。
+この制限はコンパイル時に検査され、
+<code>conf-spawn</code> ファイルの値が 255 を越えていると、
+次のようにコンパイルが中断されます。
+</p>
+<div>
+<code>conf-spawn</code> ファイルに 256 以上の数を記述して qmail をコンパイルすると…:
+<pre class="terminal"><code><var>…ほかのオブジェクトやバイナリのコンパイル状況…</var>
+./auto-int auto_spawn `head -1 conf-spawn` &gt; auto_spawn.c
+./compile auto_spawn.c
+./load chkspawn substdio.a error.a str.a fs.a auto_spawn.o 
+./chkspawn
+Oops. You have set conf-spawn higher than 255.
+make: *** [spawn.o] Error 1
+</code></pre>
+</div>
+<!-- COMMENT by fumiya
+chkspawn コマンドは、FD_SET() マクロが扱える記述子の最大数の検査もしている。
+-->
+
+<h4>最大並列数の上限を 256 以上にする</h4>
+<p>
+次のパッチを適用することで、
+qmail は 256 以上のプロセスを生成できるようになります。
+</p>
+<dl>
+<dt>256 以上の最大並列数を指定可能にするパッチ</dt>
+    <dd><a href="http://www9.jp.qmail.org/big-concurrency.patch">http://www9.jp.qmail.org/big-concurrency.patch</a> (ミラー)</dd>
+    <dd><a href="http://www.qmail.org/big-concurrency.patch">http://www.qmail.org/big-concurrency.patch</a></dd>
+<dt>このパッチの適用例</dt>
+    <dd><pre class="terminal"><code>$ <kbd>cd <var>source/dir/of/</var>qmail-1.03</kbd>
+$ <kbd>patch -p1 &lt; <var>/path/to/</var>big-concurrency.patch</kbd></code></pre></dd>
+</dl>
+<p>
+このパッチにより、実装としては最大 65536 の並列実行に対応しますが、
+65000 以下に制限するように作られています。
+そこまで多くのプロセスを実行するには、
+CPU 速度、メモリ、ネットワーク帯域、
+そのほか相当のリソースが必要になり現実的ではないため、
+問題ないでしょう。
+<code>conf-spawn</code> ファイルは 1000 に書き換わります。
+</p>
+<p>
+通常 UNIX カーネルは、システム全体あるいはユーザーごとに、
+同時に実行できるプロセスや扱えるファイル記述子の数、
+消費メモリサイズなどに制限をかけています。
+このパッチを適用し qmail の制限を増すだけでなく、
+カーネルパラメーターの調整を確認することを忘れないようにしてください。
+</p>
+<!-- COMMENT by fumiya
+<h3><a name="performance-todo"></a></h3>
+<h4>キューの構造と問題点</h4>
+<p>
+</p>
+<h4>キューの構造を変更することによるパフォーマンス改善</h4>
+<p>
+</p>
+<dl>
+<dt>キューの構造を変更し、大量配送時にパフォーマンスを出すためのパッチ</dt>
+    <dd><a href="http://www9.jp.qmail.org/big-todo.103.patch">http://www9.jp.qmail.org/big-todo.103.patch</a> (ミラー)</dd>
+    <dd><a href="http://www.qmail.org/big-todo.103.patch">http://www.qmail.org/big-todo.103.patch</a></dd>
+</dl>
+<h4><code>big-todo.103.patch</code> の問題点</h4>
+<p>
+キューの互換性がなくなる
+</p>
+-->
+
+<hr>
+<h2><a name="appendix">付録</a></h2>
+<h3><a name="appendix-reference">参考文献</a></h3>
+<dl>
+<dt>qmail とパッチ - DJB's software maniacs</dt>
+    <dd><a href="http://www.emaillab.org/djb/qmail-patch/index.html">http://www.emaillab.org/djb/qmail-patch/index.html</a></dd>
+<dt>The qmail home page</dt>
+    <dd><a href="http://www9.jp.qmail.org">http://www9.jp.qmail.org</a> (ミラー)</dd>
+    <dd><a href="http://www.qmail.org">http://www.qmail.org</a></dd>
+</dl>
+<h3><a name="appendix-changelog">更新履歴</a></h3>
+<dl>
+<dt>2001-12-17 佐藤文優</dt>
+    <dd>初版発行前の校正の取り込み。</dd>
+<dt>2001-11-12 佐藤文優</dt>
+    <dd>http://www.qmail.org を紹介している箇所にミラー http://www9.jp.qmail.org を追加。</dd>
+<dt>2001-11-06 佐藤文優</dt>
+    <dd>第1稿の完成</dd>
+<dt>2001-10-08 佐藤文優</dt>
+    <dd>執筆開始</dd>
+</dl>
+<hr>
+<div class="footer">
+第11章 パッチによる qmail の動作変更 - qmail で作る快適メールサーバー<br>
+Copyright &copy; 2001,2010 SATOH Fumiyasu<br>
+</div>
+</body>
+</html>

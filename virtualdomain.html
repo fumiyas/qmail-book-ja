@@ -1,0 +1,853 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01//EN"
+                      "http://www.w3.org/TR/html4/strict.dtd">
+<html lang="ja">
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<meta http-equiv="Content-Language" content="ja">
+<meta http-equiv="Content-Style-Type" content="text/css">
+<meta name="author" lang="en" content="SATOH Fumiyasu">
+<meta name="author" lang="ja" content="佐藤 文優">
+<link rel="stylesheet" href="./book.css" type="text/css">
+<title>第8章 仮想ドメイン機能による複数サイトの実現 - qmail で作る快適メールサーバー</title>
+</head>
+<body>
+<h1><a name="top">第8章 仮想ドメイン機能による複数サイトの実現 - qmail で作る快適メールサーバー</a></h1>
+<div class="sign">
+佐藤 文優 &lt;<a href="http://www.sfo.jp/blog/">http://www.sfo.jp/blog/</a>&gt;<br>
+2001年12月17日 更新, 2001年11月4日 以来
+</div>
+
+<hr>
+<h2><a name="toc">目次</a></h2>
+<dl>
+<dt><a href="#virtualdomain">8.1 仮想ドメインとは</a></dt>
+    <dd class="none"><a href="#virtualdomain-how">8.1.1 1台のホストで複数ドメインのサービスを提供するには</a></dd>
+    <dd class="none"><a href="#virtualdomain-qmail">8.1.2 qmail による仮想ドメイン対応</a>
+	<ul>
+	<li class="none">qmail の仮想ドメイン機能</li>
+	<li class="none">仮想ドメイン下のユーザーがメールを読むには</li>
+	</ul>
+    </dd>
+    <dd class="none"><a href="#virtualdomain-pop3">8.1.3 POP3 サーバーの仮想ドメイン対応</a>
+	<ul>
+	<li class="none"><code>qmail-pop3d</code> の仮想ドメイン対応</li>
+	<li class="none">VMailMgr と VPopMail、どちらがよいか</li>
+	</ul>
+    </dd>
+<dt><a href="#vmailmgr">8.2 qmail と VMailMgr による仮想ドメイン環境の構築</a></dt>
+    <dd class="none"><a href="#vmailmgr-install">8.2.1 VMailMgr のインストール</a>
+	<ul>
+	<li class="none">VMailMgr のソースの入手</li>
+	<li class="none">ソースアーカイブの展開と <code>configure</code> スクリプトの実行</li>
+	<li class="none">コンパイルとインストール</li>
+	<li class="none"><code>qmail-pop3d</code> 起動スクリプトに VMailMgr を組み込む</li>
+	<li class="none">VMailMgr の各種バイナリ/ソースパッケージ</li>
+	</ul>
+    </dd>
+    <dd class="none"><a href="#vmailmgr-setup">8.2.2 VMailMgr の設定</a>
+	<ul>
+	<li class="none">仮想ドメイン用の UNIX ユーザーの作成</li>
+	<li class="none">qmail の仮想ドメインの設定</li>
+	<li class="none">VMailMgr による仮想ドメインの初期設定</li>
+	<li class="none">仮想ユーザーの作成</li>
+	</ul>
+    </dd>
+    <dd class="none"><a href="#vmailmgr-client">8.2.3 VMailMgr 環境をテストする</a>
+	<ul>
+	<li class="none">仮想ドメイン宛にメールを送信</li>
+	<li class="none">仮想ドメインのメールボックスにアクセス</li>
+	</ul>
+    </dd>
+<dt><a href="#appendix">付録</a></dt>
+    <dd class="none"><a href="#appendix-reference">参考文献</a></dd>
+    <dd class="none"><a href="#appendix-changelog">更新履歴</a></dd>
+</dl>
+
+<hr>
+<h2><a name="virtualdomain">8.1 仮想ドメインとは</a></h2>
+<h3><a name="virtualdomain-how">8.1.1 1台のホストで複数ドメインのサービスを提供するには</a></h3>
+<p>
+DNS や Web そしてメールなど、
+いくつかのネットワークサービスを提供するサーバーを構築・運用するとき、
+各サービスを別々のホストに分離することはもちろん、
+単一のホストに同居させることもできます。
+どちらにしても利点と欠点がありますが、
+単一のホストにまとめたほうが導入・運用のコストを抑えることができるでしょう。
+特に、ホストのパフォーマンスに余裕があるときや、
+小規模なサイトであるならば、
+1台のホストで複数のサービスを提供することはよくあります。
+</p>
+<p>
+それでは、
+複数のサイト向けのサービスを単一のホストで実現するにはどうしたらよいでしょうか。
+例えばインターネットメールサービスであれば、
+それぞれのサイトのドメインのメールを扱う SMTP サーバーが必要になります。
+</p>
+<p>
+1台のホストに複数のサーバーソフトウェアをインストールし、
+それぞれ別のサイト (ドメイン) 用のサービスを提供する方法があります。
+設定やユーザー情報なども、サイトごとに分離した形で管理されます。
+これを実現するには、
+SMTP なら各サーバーが同じポート番号 25 を使用するため、
+ホストにはサイトの数だけ IP アドレスが必要になります。
+近頃の UNIX 系の OS は、
+1つの物理的なネットワークインターフェイスに複数の
+IP アドレスを割り当てることができるので、
+ネットワークカードを追加しなくても済みます。
+</p>
+<p>
+複数サイトのサービスを扱えるサーバーソフトウェアを利用する方法もあります。
+この場合も、もちろん設定やユーザー情報はサイトごとに用意しなければなりません。
+通信プロトコルやユーザーの認証情報など、
+クライアントから渡されるデータに何かしらサイト (ドメイン名)
+を特定できる情報が含まれているのであれば、
+サイトごとに IP アドレスを用意する必要はありません。
+サーバーソフトウェアは、
+ドメイン情報をもとにサービス対象のサイトを認識します。
+</p>
+<p>
+このように、単一のホストで複数サイト (ドメイン)
+向けのサービスを扱える機能のことを、
+「仮想ホスト (virtual host) 機能」あるいは
+「仮想ドメイン (virtual domain) 機能」と呼びます。
+また、サーバーの IP アドレスにより識別・サービスを提供されるサイトのドメインを
+「IP ベースの仮想ドメイン (IP-based virtual domain)」、
+クライアントから渡されるドメイン名やホスト名、
+ユーザー名などをもとに識別・サービスを提供されるサイトのドメインを
+「名前ベースの仮想ドメイン (name-based virtual domain)」
+と呼びます。
+</p>
+<!-- COMMENT by fumiya
+ボツ。
+<p>
+ときどき、
+「ヴァーチャルドメイン」のことを「仮想ドメイン」などと表わすことがあります。
+「仮想」というと、所詮「虚像」で役に立たないような印象があり、
+違和感を覚えます。
+</p>
+-->
+<h3><a name="virtualdomain-qmail">8.1.2 qmail による仮想ドメイン対応</a></h3>
+<h4>qmail の仮想ドメイン機能</h4>
+<p>
+qmail には、複数のドメインのメールを受信し、
+ドメインごとに異なるユーザー空間とメールボックスを扱うための機能があります。
+</p>
+<p>
+qmail で単一ドメインだけを扱う場合は、通常、
+ドメインのユーザーは UNIX のユーザーアカウントに対応します。
+各ユーザーのメールは、対応する UNIX ユーザーに配送・保持されます。
+</p>
+<p>
+一方、
+仮想ドメイン機能を利用してほかのドメイン宛のメールをローカル配送させる場合は、
+メールはドメインごとに指定された単一の UNIX ユーザー宛に配送されます。
+仮想ドメインのユーザーは、
+配送先の UNIX ユーザーが所有する <code>.qmail</code> ファイルに対応します。
+UNIX ユーザーには通常のアドレスではなく拡張アドレス
+(→<a href="./dot-qmail.html#extension">7.2 節</a>) として配送されるため、
+「<code>.qmail-<var>仮想ドメインのユーザー名</var></code>」
+という名前のファイルが評価対象になります。
+つまり、<code>.qmail</code> ファイルによって、
+仮想的なユーザーと配送先のメールボックスを管理します。
+</p>
+<p>
+qmail の仮想ドメイン機能により受信したメールは、
+以下に示すような流れでメールボックスに配送されます。
+ここで示している仮想ドメインや UNIX ユーザーの名前、
+そして .qmail ファイルとメールボックスの配置の構成は、
+ほんの一例です。
+当然ながら、これとは異なる名前や構成も可能です。
+</p>
+<div>
+図: qmail の仮想ドメイン機能によるメールの受信の流れ
+<img src="image/vdomain-flow.png" alt="Overview and flow chart of qmail virtualdomain facility">
+<ol>
+    <li>仮想ドメイン管理下のアドレス alice@vdom.example.jp 宛のメールを受信する。</li>
+    <li>宛先アドレスは、vdom.example.jp ドメインの配送先に指定されている
+	UNIX ユーザー <code>vdomuser</code> の拡張アドレスに変換される。
+    </li>
+    <li><code>vdomuser</code> のホームディレクトリ下の
+	<code>.qmail-alice</code> が評価される。
+    </li>
+    <li><code>.qmail-alice</code> で指定されたメールボックス
+	<code>~vdomuser/alice/Maildir/</code> に配送される。
+    </li>
+</ol>
+</div>
+<h4>仮想ドメイン下のユーザーがメールを読むには</h4>
+<p>
+qmail の仮想ドメイン機能を利用すれば複数ドメインのメール受信が可能になりますが、
+受信しメールボックスに保存されたメールは、
+ユーザーがどうやって読むのでしょうか。
+</p>
+<p>
+先の節で触れたように、
+qmail によって受信された仮想ドメインのメールは、
+すべてある 1つの UNIX ユーザーが保持しています。
+よって、
+仮想ドメインのユーザーをメールボックスが保持されているホストにログインさせ、
+自分のメールボックスだけを参照させることは難しくなります。
+</p>
+<p>
+そこで、仮想ドメイン用の独自のユーザー管理と認証、
+そして仮想ドメインのメールボックスへのアクセスに対応した
+POP3/IMAP サーバーを利用します。
+仮想ドメインにより管理されるサイトのユーザーには、
+ユーザーのクライアント端末から
+POP3/IMAP を利用してメールボックスにアクセスさせます。
+</p>
+<p>
+実は、qmail による仮想ドメイン下のユーザーは、
+別々の UNIX ユーザーに割り当てることも可能です。
+しかし、
+ドメインのユーザーに個別の UNIX のユーザー権限を与える必要がないことも多いです。
+唯一のドメインを扱うときでさえ、
+個別の UNIX ユーザーに分離せず、
+仮想ドメイン機能を利用して単一の UNIX ユーザーに集約させることもあります。
+</p>
+<h3><a name="virtualdomain-pop3">8.1.3 POP3 サーバーの仮想ドメイン対応</a></h3>
+<h4><code>qmail-pop3d</code> の仮想ドメイン対応</h4>
+<p>
+qmail 付属の POP3 サーバー <code>qmail-pop3d</code> は、
+仮想ドメイン環境下でも使用することができます。
+<code>qmail-pop3d</code> は、
+ユーザー認証とメールボックスの位置の指示を別のプログラムに任せているため、
+そのプログラムが仮想ドメインに対応していることが要件になります。
+</p>
+<p>
+先の「<a href="./pop-apop-imap.html#pop">5.1 POP サーバーの設定</a>」
+で紹介した認証プログラム checkpassword は、
+UNIX ユーザーの認証にのみ対応しており、
+仮想ドメインには利用できません。
+<code>qmail-pop3d</code> とそのフロントエンドである
+<code>qmail-popup</code> に対応し、
+かつ仮想ドメインにも対応している認証プログラムとしては、
+VMailMgr か VPopMail がよく利用されます。
+</p>
+<dl>
+<dt>VMailMgr の Web サイト</dt>
+    <dd><a href="http://www.vmailmgr.org">http://www.vmailmgr.org</a></dd>
+<dt>VPopMail の Web サイト</dt>
+    <dd><a href="http://www.inter7.com/vpopmail/">http://www.inter7.com/vpopmail/</a></dd>
+</dl>
+<p>
+両パッケージにはいくつか違いがありますが、共通して次のような特徴があります。
+</p>
+<ul>
+    <li>IP ベース/名前ベースの仮想ドメインに対応</li>
+    <li>仮想ドメインのユーザー情報を管理するためのツールが付属
+	(追加・削除・パスワード設定・転送先設定など)
+    </li>
+    <li>管理用の Web インターフェイスが用意されている</li>
+    <li>
+	メールボックスへの保存は独自の配送プログラムが行う
+	(ユーザーごとの <code>.qmail</code> ファイルではなく、
+	<code>.qmail-default</code> ファイルに仕組まれた専用の配送プログラムがユーザーごとのメールボックスに振り分ける)
+    </li>
+    <li>ユーザーのメールボックスは maildir 形式</li>
+    <li>ユーザーごとのメールボックス容量を制限する機能 (クォータ機能)</li>
+    <li>IMAP サーバーの一種 Courier-IMAP (→「<a href="./pop-apop-imap.html#imap">5.3 IMAP サーバーの設定</a>」) の認証モジュールとして利用可能
+	(仮想ドメインにも対応)
+    </li>
+    <li>仮想ドメインではない UNIX ユーザーの認証にも対応</li>
+</ul>
+<p>
+どちらかというと、VMailMgr より VPopMail のほうが人気があるようです。
+VPopMail には、VMailMgr にはない次のような特徴もあるせいかもしれません。
+</p>
+<ul>
+    <li>単一の UNIX ユーザーアカウントで複数の仮想ドメインを構成可能</li>
+    <li>ユーザー情報は cdb 形式のほか、
+	MySQL, PostgreSQL, Oracle, Sybase, LDAP
+	に保持できるモジュールが付属
+    </li>
+    <li>APOP 方式 (→「<a href="./pop-apop-imap.html#apop">5.2 APOP サーバーの設定</a>」) による認証にも対応</li>
+    <li>POP before SMTP (→「<a href="./smtp-auth.html">第6章 SMTP の認証</a>」) を実現するための
+	<code>qmail-smtpd</code> (<code>tcpserver</code>)
+	用のアクセス制御ファイルを生成する機能
+    </li>
+    <li>仮想ドメイン追加用のコマンドを実行すると、
+	qmail の設定ファイルの書き換えから、
+	<code>qmail-send</code> の再起動 (<code>HUP</code> シグナル送信)
+	も自動で実行してくれる
+    </li>
+</ul>
+<p>
+両ソフトウェアパッケージには、ここで紹介していない特徴もあります。
+詳しくは Web ページや付属文書などをご覧ください。
+VPopMail については、以下のページに日本語で書かれた情報があります
+(情報が少々古いので注意)。
+</p>
+<dl>
+<dt>VPopMail の日本語ドキュメントがある Web サイト (ユーザーサイトの一つ)</dt>
+    <dd><a href="http://qmail.visionmakers.net/">http://qmail.visionmakers.net/</a></dd>
+</dl>
+<p>
+また、<code>qmail-popup</code>/<code>qmail-pop3d</code>
+に対応した認証プログラムの多くは、
+The qmail home page で見つけることができます。
+ここで紹介した VMailMgr と VPopMail の人気や機能の多さだけにとらわれず、
+ほかの認証プログラムも評価してみることをお勧めします。
+</p>
+<dl>
+<dt>checkpassword と代替プログラムの情報 (The qmail home page)</dt>
+    <dd><a href="http://www9.jp.qmail.org/top.html#checkpassword">http://www9.jp.qmail.org/top.html#checkpassword</a> (ミラー)</dd>
+    <dd><a href="http://www.qmail.org/top.html#checkpassword">http://www.qmail.org/top.html#checkpassword</a></dd>
+</dl>
+<h4>VMailMgr と VPopMail、どちらがよいか</h4>
+<p>
+VPopMail は VMailMgr より高機能であり、利用者も多いため、
+筆者は一旦は VPopMail を採用し解説しようとしました。
+しかし、VPopMail には次のような問題があることに気付いたため、
+結局は VMailMgr を採用することにしました。
+そんな私は偏執的でしょうか?
+</p>
+<dl>
+<dt>仮想ドメインの管理はすべて <code>root</code> 権限で行う</dt>
+    <dd>
+    <p>
+    文書で明示している箇所は見つけられなかったが、
+    仮想ドメインの管理作業は、
+    すべて <code>root</code> 権限で行う方針のようである。
+    <a href="../source/vpopmail/INSTALL">付属文書ファイル <code>INSTALL</code></a>
+    にはそのような操作例が記述がされている。
+    </p>
+    <p>
+    <code>root</code> 権限は仮想ドメインを受信するために
+    qmail の設定を変更するとき以外、不要なはずである。
+    仮想ドメインの管理権限を
+    <code>root</code> から委譲することは考慮していないのだろうか。
+    </p>
+    </dd>
+<dt>インストールされるコマンドのファイルが VPopMail 専用ユーザーの所有になる</dt>
+    <dd>
+    <p>
+    仮にクラックされ VPopMail 専用のユーザー権限が奪われると、
+    クラッカーは、
+    VPopMail 付属のコマンドを書き換えることが可能になる。
+    VPopMail のコマンドは <code>root</code> が起動することがあるため、
+    結果、<code>root</code> 権限までも奪取されてしまう。
+    </p>
+    </dd>
+</dl>
+<!-- COMMENT by fumiya
+FIXME: 説明が面倒なのでボツ。 (^^;
+
+VPopMail は、make install によりインストールされるコマンドは、ファイルの
+所有者が vpopmail になる。仮に VPopMail にセキュリティの問題があると、
+それらのファイルが書き換え可能である。
+
+一方、付属の INSTALL には、POP before SMTP (- -enable-roaming-users=y)
+を利用する場合、<code>root</code> 権限で
+VPopMail 付属のコマンド <code>clearopensmtp</code> を
+実行させるような設定例が載っている。つまり、vpopmail 権限を奪えば、
+<code>root</code> 権限まで奪うことが可能となる。
+
+また、<code>vadddomain</code> コマンドをはじめ、
+VPopMail のコマンドはすべて <code>root</code> 権限から利用するようなふしがある。
+The qmail Handbook にそのような解説が
+あるだけで、VPopMail 自身のポリシーとしては違うかもしれない。VPopMail
+付属文書などから関連する情報が見つけられないため、実際どうなのかは不明。
+
+直接関係のないソフトの設定ファイルやプロセスに勝手に手を出すのも
+好きではない。せめてオプションで選択可能にしておくべきだ。
+-->
+
+<hr>
+<h2><a name="vmailmgr">8.2 qmail と VMailMgr による仮想ドメイン環境の構築</a></h2>
+<h3><a name="vmailmgr-install">8.2.1 VMailMgr のインストール</a></h3>
+<h4>VMailMgr のソースの入手</h4>
+<p>
+VMailMgr のソースアーカイブを、
+同 Web サイトのダウンロードページなどから入手してください。
+現在、最新バージョンは 0.96.9 で、
+アーカイブファイル名は vmailmgr-0.96.9.tar.gz、
+サイズは 362,379 バイトです。
+</p>
+<dl>
+<dt>VMailMgr の最新バージョンのソースアーカイブ (RPM/SRPM パッケージもあり)</dt>
+    <dd><a href="http://www.vmailmgr.org/current/">http://www.vmailmgr.org/current/</a></dd>
+</dl>
+<p>
+VMailMgr のコンパイルには、C コンパイラと C++ コンパイラ、
+リンカー、make ユーティリティが必要です。
+</p>
+<h4>ソースアーカイブの展開と <code>configure</code> スクリプトの実行</h4>
+<p>
+ソースアーカイブは tar + gzip 形式になっているので、
+両コマンドを利用して展開します。
+ソースは「<code>vmailmgr-<var>バージョン番号</var></code>」
+という名前のディレクトリ以下に展開されます。
+</p>
+<div>
+VMailMgr ソースアーカイブの展開:
+<pre class="terminal"><code>$ <kbd>gzip -dc vmailmgr-0.96.9.tar.gz | tar xf -</kbd>
+</code></pre>
+</div>
+<p>
+次に展開されたディレクトリに入り、
+付属の <code>configure</code> スクリプトを実行し、
+コンパイル前の準備をします。
+</p>
+<div>
+VMailMgr のコンパイル前の準備 (<code>configure</code> スクリプト実行):
+<pre class="terminal"><code>$ <kbd>cd vmailmgr-0.96.9</kbd>
+$ <kbd>./configure</kbd>
+<var>… configure の実行状況 …</var>
+</code></pre>
+</div>
+<p>
+デフォルトで生成される <code>Makefile</code> は、
+VMailMgr のコマンドやマニュアルファイルなどを
+<code>/usr/local</code> 以下にインストールします。
+インストール先を変更するには、
+<code>configure</code> スクリプトの
+<code>--prefix</code> オプションを利用して指定してください。
+</p>
+<h4>コンパイルとインストール</h4>
+<p>
+あとは <code>make</code> コマンドでコンパイルとインストールを実行します。
+</p>
+<div>
+VMailMgr のコンパイルとインストール:
+<pre class="terminal"><code>$ <kbd>make</kbd>
+<var>… バイナリなどのコンパイル状況 …</var>
+$ <kbd>su</kbd>
+Password: <kbd><var>root のパスワード</var></kbd>
+# <kbd>make install</kbd>
+<var>… インストールの状況 …</var>
+</code></pre>
+</div>
+<h4><code>qmail-pop3d</code> 起動スクリプトに VMailMgr を組み込む</h4>
+<p>
+<code>qmail-pop3d</code> (<code>tcpserver</code>) の起動スクリプトを修正し、
+<code>checkpassword</code> の代わりに、
+VMailMgr 付属の認証プログラム <code>checkvpw</code> を使うように変更します。
+デフォルトで <code>checkvpw</code> は
+<code>/usr/local/bin/checkvpw</code> にインストールされます。
+「<a href="./pop-apop-imap.html#apop">5.2 APOP サーバーの設定</a>」を参考にして修正してください。
+</p>
+<p>
+修正を終えた後は、
+<code>qmail-pop3d</code> (<code>tcpserver</code>)
+を再起動するのを忘れないようにしてください。
+</p>
+<h4>VMailMgr の各種バイナリ/ソースパッケージ</h4>
+<dl>
+<dt>バイナリ/ソース RPM パッケージ (Red Hat Linux など)</dt>
+    <dd>ソースアーカイブに RPM パッケージ作成用の spec ファイルが含まれている</dd>
+    <dd>VMailMgr の Web サイトにも SRPM/RPM とも公開されている</dd>
+<dt>Debian GNU/Linux</dt>
+    <dd>残念ながら公式パッケージはない</dd>
+    <dd><a href="http://kebo.vlsm.org/debian-extra/dists/stable/vmailmgr/">http://kebo.vlsm.org/debian-extra/dists/stable/vmailmgr/</a> などから入手可能</dd>
+<dt>FreeBSD など</dt>
+    <dd>残念ながら公式パッケージ / port はない</dd>
+</dl>
+<h3><a name="vmailmgr-setup">8.2.2 VMailMgr の設定</a></h3>
+<p>
+この節では、ドメイン vdom.example.com のメールを仮想ドメインで受信し、
+POP3 経由でメールボックスにアクセスさせるための設定例を紹介します。
+</p>
+<h4>仮想ドメイン用の UNIX ユーザーの作成</h4>
+<p>
+VMailMgr は、1つの仮想ドメインを専用の UNIX ユーザーで管理します。
+ここでは、ユーザー名を <code>vdomuser</code> とし、グループも専用の
+<code>vdomgroup</code> を用意して所属させましょう。
+</p>
+<div>
+ドメイン vdom.example.com 用の UNIX ユーザーとグループの作成 (Linux, Solaris など):
+<pre class="terminal"><code># <kbd>groupadd -g vdomgroup</kbd>
+# <kbd>useradd -g vdomgroup -m vdomuser</kbd>
+</code></pre>
+</div>
+<div>
+ドメイン vdom.example.com 用の UNIX ユーザーとグループの作成 (FreeBSD):
+<pre class="terminal"><code># <kbd>pw groupadd vdomgroup</kbd>
+# <kbd>pw useradd vdomuser -g vdomgroup -m</kbd>
+</code></pre>
+</div>
+<p>
+仮想ドメインのユーザー情報やメールボックスは、
+すべて専用 UNIX ユーザーのホームディレクトリ以下に保持されます。
+よってホームディレクトリは必須です。
+また、仮想ドメインの管理はこのユーザーで行なうため、
+シェルを利用できるようにしておきます。
+</p>
+<h4>qmail の仮想ドメインの設定</h4>
+<p>
+まずは SMTP (<code>qmail-smtpd</code>) による受信のための設定です。
+vdom.example.com ドメイン宛のメールを受信するように、
+<code>control/rcpthosts</code> ファイルに次の一行を追加します。
+</p>
+<div>
+SMTP で vdom.example.com ドメイン宛メールを受信可能にする
+(<code>control/rcpthosts</code> に追加):
+<pre class="code"><code>vdom.example.com
+</code></pre>
+</div>
+<p>
+受信した vdom.example.com ドメイン宛のメールを仮想ドメインとして扱い、
+ローカルのユーザー vdomuser に配送させます。
+仮想ドメインの設定は、
+<code>control/virtualdomains</code> ファイルで指示します。
+</p>
+<div>
+vdom.example.com ドメイン宛メールを仮想ドメイン扱いする
+(<code>control/virtualdomains</code> に追加):
+<pre class="code"><code>vdom.example.com:vdomuser
+</code></pre>
+</div>
+<p>
+<code>control/virtualdomains</code> ファイルの変更を反映するには、
+<code>qmail-send</code> プロセスに <code>HUP</code> シグナルを送るか、
+再起動しなければなりません。
+また、
+vdom.example.com 宛のメールが仮想ドメインの設定したこのホストに送信されるよう、
+vdom.example.com ドメインの MX レコードの設定も合わせて必要です。
+</p>
+<h4>VMailMgr による仮想ドメインの初期設定</h4>
+<p>
+仮想ドメインのユーザーを管理する前に、
+VMailMgr による仮想ドメインの準備をしなければなりません。
+<code>su</code> コマンドを利用して
+<code>root</code> から仮想ドメインの管理用ユーザー <code>vdomuser</code> になり、
+VMailMgr の <code>vsetup</code> コマンドを実行してください。
+</p>
+<div>
+仮想ドメインの初期設定:
+<pre class="terminal"><code># <kbd>su - vdomuser</kbd>
+$ <kbd>/usr/local/bin/vsetup</kbd>
+vsetup: created users directory.
+vsetup: wrote '.qmail-default' file.
+vsetup: added alias 'mailer-daemon'
+vsetup: added alias 'postmaster'
+vsetup: added alias 'root'
+</code></pre>
+</div>
+<p>
+<code>vsetup</code> コマンドを起動した結果、
+ホームディレクトリ以下に次のようなファイルとディレクトリが生成されます。
+</p>
+<dl>
+<dt><code>.qmail-default</code> ファイル</dt>
+    <dd>
+    仮想ドメイン宛のメール配送の指示。
+    このドメインのユーザー宛のメールは、
+    すべてこのファイルに記述されている配送指定に従う。
+    </dd>
+    <dd>
+    VMailMgr の配送プログラム <code>vdeliver</code> を起動するように設定される。
+    </dd>
+<dt><code>passwd.cdb</code> ファイル</dt>
+    <dd>
+    仮想ユーザーの情報を保持するデータベースファイル。
+    ユーザー名、パスワード (MD5 でハッシュ化)、転送設定、
+    メールボックス容量制限などの情報が含まれている。
+    </dd>
+    <dd>
+    自動的に 3つのエイリアス
+    <code>mailer-daemon</code>,
+    <code>postmaster</code>,
+    <code>root</code>
+    が作成される。
+    デフォルトの転送先は、
+    そのホストの <code>postmaster</code> 宛になる
+    (ドメイン部は省略されているため、qmail により
+    <code>control/envnoathost</code> または
+    <code>me</code> に指定されたドメイン名が補完される)。
+    </dd>
+<dt><code>users</code> ディレクトリ</dt>
+    <dd>
+    仮想ユーザーのメールボックスが置かれるディレクトリ。
+    ユーザーのメールボックスは maildir 形式となり、
+    パス名は「<code>users/<var>ユーザー名</var>/</code>」となる。
+    </dd>
+</dl>
+<h4>仮想ユーザーの作成</h4>
+<p>
+VMailMgr の <code>vadduser</code> コマンドを用い、
+仮想ドメインの仮想ユーザーを作成します。
+</p>
+<div>
+仮想ユーザーの追加とパスワード割り当て:
+<pre class="terminal"><code>$ <kbd>/usr/local/bin/vadduser alice</kbd>
+Enter the user's new password: <kbd><var>aliceに割り当てるパスワード</var></kbd>
+Please type it again for verification: <kbd><var>確認のためのパスワード入力</var></kbd>
+vadduser: user 'alice' successfully added
+</code></pre>
+</div>
+
+<h3><a name="vmailmgr-client">8.2.3 VMailMgr 環境をテストする</a></h3>
+<h4>仮想ドメイン宛にメールを送信</h4>
+<p>
+<code>qmail-inject</code> コマンドを使い、
+vdom.example.com ドメイン宛のユーザー宛にメールを送信してみましょう。
+送信したら、ユーザーのメールボックスにメールが届いたことを確認してください。
+</p>
+<div>
+仮想ドメインへのメール配送のテスト:
+<pre class="terminal"><code>$ <kbd>echo to: alice@vdom.example.com | qmail-inject</kbd>
+$ <kbd>ls -l users/alice/new</kbd>
+total 4
+-rw-------    1 vdomuser vdomgroup     292 Nov 14 00:10 1005664253.31953.mail
+</code></pre>
+</div>
+<h4>仮想ドメインのメールボックスのメールにアクセス</h4>
+<p>
+仮想ドメイン下に管理されるメールボックスを読むには、
+サーバーは何らかの方法でアクセス対象のドメインを識別しなければなりません。
+</p>
+<p>
+VMailMgr 付属の認証プログラム <code>checkvpw</code> は、
+ユーザー認証のためクライアントから渡されるユーザー名により、
+アクセス対象のドメインを識別することができます (名前ベースの仮想ドメイン機能)。
+具体的には、
+POP3/IMAP アクセス用のユーザー名として、
+ドメインのユーザー名に続けてアットマーク「@」
+とドメイン名を付加したものを使います。
+つまり、ユーザー名としてメールアドレスを指定します。
+</p>
+<p>
+以下に <code>telnet</code> コマンドで
+<code>checkvpw</code> コマンドを組み込んだ
+POP3 サーバー (<code>qmail-pop3d</code>) に接続し、
+仮想ドメイン vdom.example.com のメールボックスにアクセスする例を示します。
+</p>
+<div>
+仮想ドメインのメールボックスに <code>telnet</code> コマンドでアクセス:
+<pre class="terminal"><code>$ <kbd>telnet localhost pop3</kbd>
+Trying 127.0.0.1...
+Connected to localhost.
+Escape character is '^]'.
++OK &lt;32201.1005666384@mail.isp.example.net&gt;
+<kbd>USER alice@vdom.example.com</kbd>
++OK 
+<kbd>PASS <var>aliceのパスワード</var></kbd>
++OK 
+<kbd>LIST</kbd>
++OK 
+1 292
+.
+<kbd>QUIT</kbd>
++OK 
+Connection closed by foreign host.
+</code></pre>
+</div>
+<p>
+メールクライアントの中には、
+POP3 のユーザー名にアットマーク「<code>@</code>」を含めると、
+アットマーク以降を取り除いて POP3 サーバーに渡すものがあります。
+そのようなメールクライアントをサポートするため、
+アットマークの代わりにコロン「<code>:</code>」を含めることで、
+この問題を回避することができます。
+先の例では「<code>alice@vdom.example.com</code>」の代わりに
+「<code>alice:vdom.example.com</code>」をユーザー名として使用可能です。
+</p>
+<p>
+ユーザー名にアットマークが含まれていない場合、
+仮想ドメインのユーザーでなく UNIX ユーザーの認証が行なわれます。
+</p>
+
+<!-- COMMENT by fumiya
+VPopMail はセキュリティホールがあった場合のリスクが高いのでボツ。 :-(
+連続したハイフンは「- -」に置き換えてあるので、採用する場合は注意。
+<hr>
+<h2><a name="vpopmail">8.3 qmail と VPopMail による仮想メールドメイン環境の構築</a></h2>
+<h3><a name="vpopmail-install">8.3.1 VPopMail のインストール</a></h3>
+<h4>VPopMail のソースの入手</h4>
+<p>
+VPopMail のソースアーカイブを、
+同 Web サイトのダウンロードページなどから入手してください。
+現在、最新バージョンは 5.0 で、アーカイブファイル名は vpopmail-5.0.tar.gz、
+サイズは 224,591 バイトです。
+</p>
+<dl>
+<dt>VPopMail ソースアーカイブのダウンロードページ</dt>
+    <dd><a href="http://www.inter7.com/vpopmail/download.html">http://www.inter7.com/vpopmail/download.html</a></dd>
+</dl>
+<h4>仮想ドメイン用の UNIX ユーザー/グループの作成</h4>
+<p>
+VPopMail は仮想ドメイン環境の維持・管理に、
+専用の UNIX のユーザーとグループを必要とします。
+このユーザーとグループは、コンパイル時に用意されていなくてはなりません。
+デフォルトのユーザー名は <code>vpopmail<code>,
+グループ名は <code>vchkpw</code> ですが、
+コンパイル時のオプションで変更することもできます。
+</p>
+<p>
+以下にユーザーとグループの作成作業の例を示します。
+ここではユーザー vpopmail の UID、
+グループ vchkpw の GID、ともに 89 を指定しています。
+この 89 という UID/GID 値は
+<a href="../source/vpopmail/INSTALL">VPopMail の付属文書ファイル <code>INSTALL</code></a>
+などで推奨している値で、
+FreeBSD では VPopMail 用の UID/GID として予約されています。
+実装としてこの値に依存しているわけではないので、
+89 以外の値を指定してもかまいません。
+</p>
+<div>
+VPopMail 用の UNIX ユーザーとグループの作成 (Linux, Solaris など):
+<pre class="terminal"><code># <kbd>groupadd -g 89 vchkpw</kbd>
+# <kbd>useradd -u 89 -g vchkpw -m vpopmail</kbd>
+</code></pre>
+</div>
+<div>
+VPopMail 用の UNIX ユーザーとグループの作成 (FreeBSD):
+<pre class="terminal"><code># <kbd>pw groupadd vchkpw -g 89</kbd>
+# <kbd>pw useradd vpopmail -u 89 -g vchkpw -m</kbd>
+</code></pre>
+</div>
+<p>
+仮想ドメインのユーザー情報やメールボックスをはじめ、
+VPopMail の一式 (コマンド、ドキュメントなど) すべて、
+ユーザー <code>vpopmail</code> のホームディレクトリ以下に保持されます。
+よってホームディレクトリは必須です。
+また、仮想ドメインの管理はユーザー vpopmail で行なうため、
+シェルを利用できるようにしておきます。
+FIXME: ウソ(?)。どうやらすべて root で実行するのがポリシーのようだ。
+FIXME: ここらへんもイマイチ。(The qmail Handbook がそのようになっているだけ?)
+</p>
+<h4>ソースアーカイブの展開と <code>configure</code> スクリプトの実行</h4>
+<p>
+ソースアーカイブは tar + gzip 形式になっているので、
+両コマンドを利用して展開します。
+ソースは「<code>vpopmail-<var>バージョン番号</var></code>」
+という名前のディレクトリ以下に展開されます。
+</p>
+<div>
+VPopMail ソースアーカイブの展開:
+<pre class="terminal"><code>$ <kbd>gzip -dc vpopmail-5.0.tar.gz | tar xf -</kbd>
+</code></pre>
+</div>
+<p>
+次に付属の <code>configure</code> スクリプトを実行し、
+コンパイル前の準備をします。
+このスクリプトは <code>root</code> 権限で実行するよう要求します。
+<code>root</code> 以外で実行すると、途中で処理が中断されます。
+</p>
+<div>
+VPopMail のコンパイル前の準備 (<code>configure</code> スクリプト実行):
+<pre class="terminal"><code>$ <kbd>cd vpopmail-5.0</kbd>
+$ <kbd>su</kbd>
+Password: <kbd><var>root のパスワード</var></kbd>
+# <kbd>./configure - -enable-passwd=y - -enable-roaming-users=y</kbd>
+<var>… configure の実行状況 …</var>
+# <kbd>exit</kbd>
+</code></pre>
+</div>
+<p>
+この例で <code>configure</code> スクリプトに指定している
+<code>- -enable-passwd</code> オプションは、
+仮想ドメインではない UNIX ユーザーの認証に対応するかどうかを指定します。
+このオプションに <code>y</code> を指定すると有効になります。
+デフォルトは無効 (<code>n</code>) です。
+すべてのドメインを仮想ドメインで管理するのであれば、
+無効にしておくとよいでしょう。
+</p>
+<h4>POP before SMTP に対応するための <code>configure</code> オプション</h4>
+<p>
+<code>configure</code> スクリプトの
+<code>- -enable-roaming-users</code> オプションは、
+POP before SMTP (→「<a href="./smtp-auth.html">第6章 SMTP の認証</a>」) に対応し、
+ローミングユーザーの SMTP によるメール送信をサポートするかどうか指定します。
+VPopMail は、POP3 のユーザー認証に成功したクライアントの IP アドレスを記録し、
+<code>qmail-smtpd</code> (tcpserver</code>) 用の
+cdb 形式のアクセス制御ファイルを自動的に更新します。
+</p>
+<p>
+<code>configure</code> スクリプトは、
+ソースとなるテキスト形式のアクセス制御ファイルの位置を自動的に検出します。
+VPopMail は、そのファイルに記述された静的なアクセス制御ルールに、
+POP3 の認証に成功したクライアントの IP アドレスから動的に生成したルールを加え、
+cdb 形式のアクセス制御ファイルに出力します。
+cdb 形式のアクセス制御ファイルは、
+テキスト形式のファイル名に「<code>.cdb</code>」が付加された名前になります。
+</p>
+<p>
+テキスト形式のアクセス制御ファイルの位置を明示的に指定したい場合は、
+<code>- -enable-tcpserver-file</code> オプションにパスを使用してください。
+このオプションが指定されていないと、
+<code>configure</code> スクリプトは以下の順番でファイルの存在を検査し、
+最初に見つかったものを採用します。
+いずれも見つからなければ、
+<code>~vpopmail/etc/tcp.smtp</code> が自動的に生成されます。
+</p>
+<ol>
+    <li><code>~vpopmail/etc/tcp.smtp</code></li>
+    <li><code>/etc/tcp.smtp</code></li>
+    <li><code>/etc/tcprules.d/qmail-smtpd</code></li>
+</ol>
+<h4>コンパイルとインストール</h4>
+<p>
+あとは <code>make</code> コマンドでコンパイルとインストールを実行します。
+</p>
+<div>
+VPopMail のコンパイルとインストール:
+<pre class="terminal"><code>$ <kbd>make</kbd>
+<var>… バイナリなどのコンパイル状況 …</var>
+$ <kbd>su</kbd>
+Password: <kbd><var>root のパスワード</var></kbd>
+# <kbd>make install</kbd>
+<var>… インストールの状況 …</var>
+</code></pre>
+</div>
+<p>
+<code>configure</code> スクリプトに
+<code>- -enable-roaming-users</code> オプションを指定し、
+POP before SMTP サポートを有効にしたのであれば、
+<code>root</code> の crontab に次のような行を追加してください。
+<code>clearopensmtp</code> コマンドは、
+認証された POP3 クライアントの IP アドレスリストから、
+認証してから一定時間経過したものを削除し、
+qmail-smtpd (tcpserver) 用のアクセス制御ファイルを更新します。
+</p>
+<div>
+crontab に POP before SMTP 保守用のコマンドを追加:
+<pre class="code"><code>40 * * * * /home/vpopmail/bin/clearopensmtp
+</code></pre>
+</div>
+<h4>VPopMail の各種バイナリ/ソースパッケージ</h4>
+<dl>
+<dt>バイナリ/ソース RPM パッケージ (Red Hat Linux など)</dt>
+    <dd>ソースアーカイブに RPM パッケージ作成用の spec ファイルが含まれている</dd>
+<dt>Debian GNU/Linux</dt>
+    <dd>次期版 Debian 3.0 (woody, 現在のところ正式リリース前) の「vpopmail-bin」というパッケージ (バージョン 4.9.9)</dd>
+    <dd>安定版 Debian 2.2r4 (potato) には含まれていない</dd>
+<dt>FreeBSD など</dt>
+    <dd>FreeBSD の「vpopmail」という package/port (バージョン 4.9.10)</dd>
+</dl>
+<h3><a name="vpopmail-setup">8.3.2 VPopMail の設定</a></h3>
+<h4>仮想ドメインの追加</h4>
+<h4>qmail の設定の確認</h4>
+<h4>仮想ドメインのユーザーの追加</h4>
+-->
+
+<hr>
+<h2><a name="appendix">付録</a></h2>
+<h3><a name="appendix-reference">参考文献</a></h3>
+<dl>
+<dt>VMailMgr の Web サイト</dt>
+    <dd><a href="http://www.vmailmgr.org">http://www.vmailmgr.org</a></dd>
+<dt>VPopMail の Web サイト</dt>
+    <dd><a href="http://www.inter7.com/vpopmail/">http://www.inter7.com/vpopmail/</a></dd>
+<dt>qmail 周辺ツール</dt>
+    <dd><a href="http://qmail.visionmakers.net/">http://qmail.visionmakers.net/</a></dd>
+</dl>
+
+<h3><a name="appendix-changelog">更新履歴</a></h3>
+<dl>
+<dt>2001-12-17 佐藤文優</dt>
+    <dd>初版発行前の校正の取り込み。</dd>
+<dt>2001-11-14 佐藤文優</dt>
+    <dd>第1稿の完成</dd>
+<dt>2001-11-04 佐藤文優</dt>
+    <dd>執筆開始</dd>
+</dl>
+
+<hr>
+<div class="footer">
+第8章 仮想ドメイン機能による複数サイトの実現 - qmail で作る快適メールサーバー<br>
+Copyright &copy; 2001,2010 SATOH Fumiyasu<br>
+</div>
+</body>
+</html>

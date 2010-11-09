@@ -1,0 +1,228 @@
+/*
+    References:
+	http://www.swlab.csce.kyushu-u.ac.jp/man/rec-css2/cover.html
+	http://www6.ocn.ne.jp/~k-time/hp/style/main.html
+	http://japan.internet.com/webtutorial/20010808/2.html
+*/
+
+/* Tag specific style
+ * ====================================================================== */
+
+body {
+    color:		black;
+    background-color:	white;
+    margin-top:		0px;
+    margin-left:	0.5em;
+}
+
+/* Anchor
+ * ---------------------------------------------------------------------- */
+
+a:link {
+    text-decoration:	none;
+}
+a:visited {
+    text-decoration:	none;
+}
+a:hover {
+    text-decoration:	underline;
+};
+a:active {
+    text-decoration:	none;
+}
+
+/* Header
+ * ---------------------------------------------------------------------- */
+
+h1 {
+    width:		100%;
+    font-size:		150%;
+    border-color:	#00C0C0;
+    border-bottom-style:solid;
+    border-bottom-width:3px;
+    padding:		0.2em;
+}
+h2 {
+    font-size:		130%;
+    font-weight:	bold;
+    background-color:	#C0E0C0;
+    padding:		0.1em;
+}
+h3 {
+    font-size:		120%;
+    border-color:       #000090;
+    border-left-style:  solid;
+    border-left-width:  1em;
+    padding-left:	0.2em;
+}
+h4 {
+    font-size:		120%;
+    text-decoration:	underline;
+}
+h5 {
+    font-size:		110%;
+}
+h6 {
+    font-size:		100%;
+}
+
+/* Division, Paragraph
+ * ---------------------------------------------------------------------- */
+
+/*
+p {
+    text-indent:	1em;
+}
+*/
+
+div.sign {
+    text-align:		right;
+}
+div.footer {
+    text-align:		right;
+}
+div.notes {
+    margin-top:		1em;
+    margin-bottom:	1em;
+    margin-left:	10%;
+    margin-right:	10%;
+}
+
+/* List
+ * ---------------------------------------------------------------------- */
+
+dl {
+    margin-left:	1em;
+    line-height:	1.1em;
+}
+dl dl {
+    margin-left:	0em;
+}
+dt {
+    margin-top:		0.4em;
+/*  font-weight:        bold; */
+}
+dd {
+    margin-top:		0.1em;
+    margin-bottom:	0.4em;
+    border:		solid 0px #999999;
+    border-left-width:	2px;
+    padding-left:	0.5em;
+}
+dd.none {
+    margin-top:		0em;
+    margin-bottom:	0em;
+    border-width:	0px;
+}
+
+li.none {
+    list-style:         none;
+}
+
+/* Pre-formatted, Code
+ * ---------------------------------------------------------------------- */
+
+pre.code {
+    border:		solid 1px black;
+    border-right-width:	2px;
+    border-bottom-width:2px;
+    margin:		0.2em 0em 1em 0em;
+    width:		auto;
+    padding:		5px;
+    color:		black;
+    background-color:	white;
+    font-size:		small;
+    line-height:	1.1em;
+    white-space:	pre;
+}
+pre.terminal {
+    border:		solid 1px black;
+    border-right-width:	2px;
+    border-bottom-width:2px;
+    margin:		0.2em 0em 1em 0em;
+    width:		auto;
+    padding:		5px;
+    color:		white;
+    background-color:	#7070C0;
+    font-size:		small;
+    line-height:	1.1em;
+    white-space:	pre;
+}
+
+th code, td code {
+    white-space:	nowrap;
+}
+
+pre code kbd {
+/*  font-weight:	bold; */
+    border-color:	#FF9966;
+    border-bottom-style:solid;
+    border-bottom-width:1px;
+}
+
+code em {
+    font-style:         normal;
+    font-weight:        normal;
+    color:              #000000;
+    background-color:	#C0C0C0;
+    white-space:	pre;
+}
+code strong {
+    font-style:         normal;
+    font-weight:        normal;
+    color:              #000000;
+    background-color:	#C0C0C0;
+    white-space:	pre;
+}
+
+/* Table
+ * ---------------------------------------------------------------------- */
+
+th {
+    color:		black;
+    background-color:	#C0C0C0;
+    text-align:		left;
+    font-weight:	bold;
+}
+th.header {
+    color:		black;
+    background-color:	#F0B0B0;
+    text-align:		left;
+    font-weight:	bold;
+}
+
+td {
+    border-color:       #A0A0A0;
+    border-bottom-style:solid;
+    border-bottom-width:1px;
+}
+
+/* Strong
+ * ---------------------------------------------------------------------- */
+
+em {
+/*  color:              #000000; */
+/*  background-color:	#FFFFAA; */
+    font-style:         normal;
+    font-weight:        bold;
+}
+strong {
+    color:              #000000;
+    background-color:	#FFFFAA; 
+    font-style:         normal;
+    font-weight:        bold;
+}
+
+/* Class
+ * ====================================================================== */
+
+.left {
+    text-align:		left;
+}
+.right {
+    text-align:		right;
+}
+.center {
+    text-align:		center;
+}
+
